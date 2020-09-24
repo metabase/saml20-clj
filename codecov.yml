@@ -13,4 +13,4 @@ coverage:
     patch:
       default:
         # Changes must have at least 75% test coverage (by line)
-        target: 75%
+        target: 66%

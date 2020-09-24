@@ -25,7 +25,6 @@
    [clj-time "0.15.2"]
    [commons-io/commons-io "2.8.0"]
    [hiccup "1.0.5"]
-   #_[org.apache.santuario/xmlsec "2.2.0"]
    [org.opensaml/opensaml-core "3.4.5"]
    [org.opensaml/opensaml-saml-api "3.4.5"]
    [org.opensaml/opensaml-saml-impl "3.4.5"]
@@ -77,7 +76,7 @@
    ;; Using Cam's fork of Cloverage until 1.2.1 of the main repo is out. Once that's released we can switch back.
    {:dependencies [[camsaul/cloverage "1.2.1.1"]]
     :plugins      [[camsaul/lein-cloverage  "1.2.1.1"]]
-    :cloverage    {:fail-threshold 70}}}
+    :cloverage    {:fail-threshold 66}}}
 
   :deploy-repositories
   [["clojars"
