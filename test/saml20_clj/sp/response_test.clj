@@ -1,8 +1,9 @@
 (ns saml20-clj.sp.response-test
   (:require [clojure.test :refer :all]
-            [saml20-clj.sp.response :as response]
-            [saml20-clj.coerce :as coerce]
-            [saml20-clj.test :as test]))
+            [saml20-clj
+             [coerce :as coerce]
+             [test :as test]]
+            [saml20-clj.sp.response :as response]))
 
 (deftest response-status-test
   (doseq [{:keys [response], :as response-map} (test/responses)]
@@ -108,8 +109,7 @@
                    (#'response/assert-valid-address-attribute a "192.168.1.1"))))
           (testing "\nchecking address attribute (bad user agent address)"
             (is (= false
-                   (#'response/assert-valid-address-attribute a "im.a.bad.man"))))
-          ))))
+                   (#'response/assert-valid-address-attribute a "im.a.bad.man"))))))))
 
   (testing "invalid confirmation data should fail\n"
     (doseq [{:keys [response], :as response-map} (test/responses)
@@ -130,7 +130,4 @@
                    (#'response/assert-valid-in-response-to-attribute a "bogus_id" true))))
           (testing "\nchecking in-response-to attribute (unsolicited)"
             (is (= false
-                   (#'response/assert-valid-in-response-to-attribute a "bogus_id" false))))
-          ))))
-
-  )
+                   (#'response/assert-valid-in-response-to-attribute a "bogus_id" false)))))))))

@@ -1,14 +1,15 @@
 (ns saml20-clj.sp.response
   "Code for parsing the XML response (as a String)from the IdP to an OpenSAML `Response`, and for basic operations like
   validating the signature and reading assertions."
-  (:require [clj-time.coerce :as c.coerce]
-            [clj-time.core :as t]
+  (:require [clj-time
+             [coerce :as c.coerce]
+             [core :as t]]
             [clojure.tools.logging :as log]
             [saml20-clj
              [coerce :as coerce]
              [crypto :as crypto]])
-  (:import [org.opensaml.saml.saml2.core Assertion Attribute AttributeStatement Audience AudienceRestriction Response
-            SubjectConfirmation]))
+  (:import [org.opensaml.saml.saml2.core Assertion Attribute AttributeStatement Audience AudienceRestriction
+            Response SubjectConfirmation]))
 
 ;; this is here mostly as a convenience
 (defn ^Response parse-response
@@ -171,9 +172,10 @@
   of its original <AuthnRequest> message, unless the response is unsolicited (see Section 4.1.5 ), in
   which case the attribute MUST NOT be present"
   [^Assertion assertion auth-req-id solicited]
-  (let [assertion-map (Assertion->map assertion)
+  (let [assertion-map  (Assertion->map assertion)
         in-response-to (-> assertion-map :confirmation :in-response-to)]
-    (if (and (not solicited) in-response-to) false
+    (if (and (not solicited) in-response-to)
+      false
       (= (-> assertion-map :confirmation :in-response-to) ; This field is required
          auth-req-id))))
 
@@ -188,7 +190,7 @@
   "
   [^Assertion assertion user-agent-address]
   (let [assertion-map (Assertion->map assertion)
-        address (-> assertion-map :confirmation :address)]
+        address       (-> assertion-map :confirmation :address)]
     (if address
       (and address (= address user-agent-address))
       true))) ; Address attribute may not be included, which is still valid
