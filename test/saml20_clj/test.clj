@@ -105,9 +105,10 @@
   "Human-readable string description of a response map (from `responses`), useful for `testing` context when writing
   test code that loops over various responses."
   [{:keys [message-signed? assertion-signed? assertion-encrypted? valid-confirmation-data? invalid-confirmation-data?]}]
-  (format "Response with %s message, %s %s %s %s assertion"
+  (format "Response with %s message, %s%s %s assertion"
           (if message-signed? "SIGNED" "unsigned")
-          (if valid-confirmation-data? "VALID-CONFIRMATION-DATA" "")
-          (if invalid-confirmation-data? "INVALID-CONFIRMATION-DATA" "")
+          (cond valid-confirmation-data?   "VALID-CONFIRMATION-DATA, "
+                invalid-confirmation-data? "INVALID-CONFIRMATION-DATA, "
+                :else                      "")
           (if assertion-signed? "SIGNED" "unsigned")
           (if assertion-encrypted? "ENCRYPTED" "unencrypted")))

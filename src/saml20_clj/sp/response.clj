@@ -4,12 +4,10 @@
   (:require [clj-time
              [coerce :as c.coerce]
              [core :as t]]
-            [clojure.tools.logging :as log]
             [saml20-clj
              [coerce :as coerce]
              [crypto :as crypto]])
-  (:import [org.opensaml.saml.saml2.core Assertion Attribute AttributeStatement Audience AudienceRestriction
-            Response SubjectConfirmation]))
+  (:import [org.opensaml.saml.saml2.core Assertion Attribute AttributeStatement Audience AudienceRestriction Response SubjectConfirmation]))
 
 ;; this is here mostly as a convenience
 (defn ^Response parse-response
@@ -109,7 +107,7 @@
   (when-let [object (coerce/->SAMLObject object)]
     (.getSignature object)))
 
-(defn- assert-valid-signature
+(defn- assert-signature-valid-when-present
   [object credential]
   (when-let [signature (signature object)]
     (when-let [credential (coerce/->Credential credential)]
@@ -118,23 +116,26 @@
       ;; validate that the signature matches the IdP cert
       (org.opensaml.xmlsec.signature.support.SignatureValidator/validate signature credential))))
 
-
-(defn validate-response-signature
-  "Returns truthy if the IdP `response` is signed (either the message, or all assertions, or both message and all
-  assertions), and the signature(s) are valid for the `idp-cert-str` (as a base-64 encoded string)."
-  [response idp-public-key sp-private-key]
+(defn assert-valid-signatures
+  "Check that `response` from the IdP is signed somewhere (either the entire response, or *all* of the assertion(s)),
+  and that signatures match the IdP's certificate. Our private key, `sp-private-key`, is used to decrypt assertions if
+  needed to verify their signatures. `idp-cert` and `sp-private-key` are anything that can be coerced to a
+  `Credential`, such as an instance of `X509Certificate`, or a details map to fetch it from a keystore -- see
+  `saml20-clj.coerce/->Credential` for all valid options). "
+  [response idp-cert sp-private-key]
   (when-let [response (coerce/->Response response)]
-    (when-let [idp-public-key (coerce/->Credential idp-public-key)]
-      (try
-        (assert-valid-signature response idp-public-key)
-        (let [assertions (opensaml-assertions response sp-private-key)]
-          (doseq [assertion assertions]
-            (assert-valid-signature assertion idp-public-key))
-          (or (signed? response)
-              (every? signed? assertions)))
-        (catch org.opensaml.xmlsec.signature.support.SignatureException e
-          (log/error e "Signature NOT valid")
-          false)))))
+    (when-let [idp-cert (coerce/->Credential idp-cert)]
+      ;; validate signature on the response if there is one. This has to be done before decrypting the assertions,
+      ;; because decryption mutates `response` and that affects the checksum of the response
+      (assert-signature-valid-when-present response idp-cert)
+      (let [assertions (opensaml-assertions response sp-private-key)]
+        ;; make sure either the response or all the assertion(s) are signed
+        (when-not (or (signed? response)
+                      (every? signed? assertions))
+          (throw (ex-info "Neither response nor assertion(s) are signed" {})))
+        ;; validate signature(s) on the assertion(s) if there are any
+        (doseq [assertion assertions]
+          (assert-signature-valid-when-present assertion idp-cert))))))
 
 ;;
 ;; Subject Confirmation Data Checks

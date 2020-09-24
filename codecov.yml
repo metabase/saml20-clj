@@ -12,5 +12,5 @@ coverage:
         threshold: 1%
     patch:
       default:
-        # Changes must have at least 100% test coverage (by line)
-        target: 100%
+        # Changes must have at least 75% test coverage (by line)
+        target: 75%

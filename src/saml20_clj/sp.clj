@@ -26,4 +26,4 @@
   decrypt-response
   response-status
   assertions
-  validate-response-signature])
+  assert-valid-signatures])

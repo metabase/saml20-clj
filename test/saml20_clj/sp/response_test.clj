@@ -40,12 +40,16 @@
    (validate-signature response test/idp-cert test/sp-private-key))
 
   ([response idp-cert sp-credentials]
-   (response/validate-response-signature
-    response
-    idp-cert
-    sp-credentials)))
+   (try
+     (response/assert-valid-signatures
+      response
+      idp-cert
+      sp-credentials)
+     true
+     (catch Throwable e
+       false))))
 
-(deftest validate-response-signature-testn
+(deftest assert-valid-signatures-test
   (testing "unsigned responses should fail\n"
     (doseq [{:keys [response], :as response-map} (test/responses)
             :when                                (not (test/signed? response-map))]
@@ -54,7 +58,7 @@
                (validate-signature response))))))
   (testing "valid signed responses should pass\n"
     (doseq [{:keys [response], :as response-map} (test/responses)
-            :when                               (test/signed? response-map)]
+            :when                                (test/signed? response-map)]
       (testing (test/describe-response-map response-map)
         (testing "\nsignature should be valid when checking against IdP cert"
           (is (= true
@@ -64,7 +68,7 @@
                  ;; using SP cert for both instead
                  (validate-signature response test/sp-cert {:filename test/keystore-filename
                                                             :password test/keystore-password
-                                                            :alias "sp"}))))))))
+                                                            :alias    "sp"}))))))))
 
 ;;
 ;; Subject Confirmation Data Verifications
