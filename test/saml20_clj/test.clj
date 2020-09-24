@@ -36,6 +36,22 @@
                    :when v]
                [k true]))))
 
+;;
+;; Confirmation Data
+;;
+
+(defmethod response {:invalid-confirmation-data? true}
+  [_]
+  (sample-file "response-invalid-confirmation-data.xml"))
+
+(defmethod response {:valid-confirmation-data? true}
+  [_]
+  (sample-file "response-valid-confirmation-data.xml"))
+
+;;
+;; Signing and Encryption
+;;
+
 (defmethod response {}
   [_]
   (sample-file "response-unsigned.xml"))
@@ -79,11 +95,19 @@
 (defn signed? [response-map]
   ((some-fn :message-signed? :assertion-signed?) response-map))
 
+(defn valid-confirmation-data? [response-map]
+  ((some-fn :valid-confirmation-data?) response-map))
+
+(defn invalid-confirmation-data? [response-map]
+  ((some-fn :invalid-confirmation-data?) response-map))
+
 (defn describe-response-map
   "Human-readable string description of a response map (from `responses`), useful for `testing` context when writing
   test code that loops over various responses."
-  [{:keys [message-signed? assertion-signed? assertion-encrypted?]}]
-  (format "Response with %s message, %s %s assertion"
+  [{:keys [message-signed? assertion-signed? assertion-encrypted? valid-confirmation-data? invalid-confirmation-data?]}]
+  (format "Response with %s message, %s %s %s %s assertion"
           (if message-signed? "SIGNED" "unsigned")
+          (if valid-confirmation-data? "VALID-CONFIRMATION-DATA" "")
+          (if invalid-confirmation-data? "INVALID-CONFIRMATION-DATA" "")
           (if assertion-signed? "SIGNED" "unsigned")
           (if assertion-encrypted? "ENCRYPTED" "unencrypted")))

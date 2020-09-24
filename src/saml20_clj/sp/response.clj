@@ -2,6 +2,7 @@
   "Code for parsing the XML response (as a String)from the IdP to an OpenSAML `Response`, and for basic operations like
   validating the signature and reading assertions."
   (:require [clj-time.coerce :as c.coerce]
+            [clj-time.core :as t]
             [clojure.tools.logging :as log]
             [saml20-clj
              [coerce :as coerce]
@@ -81,6 +82,7 @@
        :confirmation {:in-response-to  (.getInResponseTo subject-confirmation-data)
                       :not-before      (c.coerce/to-timestamp (.getNotBefore subject-confirmation-data))
                       :not-on-or-after (c.coerce/to-timestamp (.getNotOnOrAfter subject-confirmation-data))
+                      :address         (.getAddress subject-confirmation-data)
                       :recipient       (.getRecipient subject-confirmation-data)}})))
 
 (defn decrypt-response ^org.opensaml.saml.saml2.core.Response [response sp-private-key]
@@ -115,6 +117,7 @@
       ;; validate that the signature matches the IdP cert
       (org.opensaml.xmlsec.signature.support.SignatureValidator/validate signature credential))))
 
+
 (defn validate-response-signature
   "Returns truthy if the IdP `response` is signed (either the message, or all assertions, or both message and all
   assertions), and the signature(s) are valid for the `idp-cert-str` (as a base-64 encoded string)."
@@ -132,6 +135,64 @@
           (log/error e "Signature NOT valid")
           false)))))
 
+;;
+;; Subject Confirmation Data Checks
+;;
+
+(defn- assert-valid-recipient-attribute
+  "Verify that the Recipient attribute in any bearer <SubjectConfirmationData> matches the
+  assertion consumer service URL to which the <Response> or artifact was delivered"
+  [^Assertion assertion acs-url]
+  (let [assertion-map (Assertion->map assertion)
+        recipient (-> assertion-map :confirmation :recipient)]
+    (= recipient acs-url))) ; Recipient field is REQUIRED
+
+(defn- assert-valid-not-on-or-after-attribute
+  "Verify that the NotOnOrAfter attribute in any bearer <SubjectConfirmationData> has not
+  passed, subject to allowable clock skew between the providers
+
+  TODO does not include allowable clock skew"
+  [^Assertion assertion]
+  (let [assertion-map (Assertion->map assertion)]
+    (if-let [not-on-or-after (-> assertion-map :confirmation :not-on-or-after)]
+      (t/before? (t/now) (c.coerce/from-sql-time not-on-or-after))
+      true))) ;; An assertion without a `not-on-or-after` field is still valid
+
+(defn- assert-valid-not-before-attribute
+  "TODO does not include allowable clock skew"
+  [^Assertion assertion]
+  (let [assertion-map (Assertion->map assertion)]
+    (if-let [not-before (-> assertion-map :confirmation :not-before)]
+      (not (t/before? (t/now) (c.coerce/from-sql-time not-before)))
+      true))) ;; An assertion without a `not-on-or-after` field is still valid
+
+(defn- assert-valid-in-response-to-attribute
+  "Verify that the InResponseTo attribute in the bearer <SubjectConfirmationData> equals the ID
+  of its original <AuthnRequest> message, unless the response is unsolicited (see Section 4.1.5 ), in
+  which case the attribute MUST NOT be present"
+  [^Assertion assertion auth-req-id solicited]
+  (let [assertion-map (Assertion->map assertion)
+        in-response-to (-> assertion-map :confirmation :in-response-to)]
+    (if (and (not solicited) in-response-to) false
+      (= (-> assertion-map :confirmation :in-response-to) ; This field is required
+         auth-req-id))))
+
+(defn- assert-valid-address-attribute
+  "If any bearer <SubjectConfirmationData> includes an Address attribute, the service provider
+  MAY check the user agent's client address against it.
+
+  NOTE The usage of this function is not super obvious, since verifying the
+  Address attribute is optional. So this function should only be called
+  if the SP is enforcing address checks, indicated either by a config
+  map or by exposing this at the API level
+  "
+  [^Assertion assertion user-agent-address]
+  (let [assertion-map (Assertion->map assertion)
+        address (-> assertion-map :confirmation :address)]
+    (if address
+      (and address (= address user-agent-address))
+      true))) ; Address attribute may not be included, which is still valid
+
 ;; TODO
 #_(defn validate [^Response response ^String idp-cert-str]
     "From the SAML spec: https://docs.oasis-open.org/security/saml/v2.0/saml-profiles-2.0-os.pdf
@@ -140,20 +201,7 @@
 
   • Verify any signatures present on the assertion(s) or the response
 
-  • Verify that the Recipient attribute in any bearer <SubjectConfirmationData> matches the
-  assertion consumer service URL to which the <Response> or artifact was delivered
-
-  • Verify that the NotOnOrAfter attribute in any bearer <SubjectConfirmationData> has not
-  passed, subject to allowable clock skew between the providers
-
-  • Verify that the InResponseTo attribute in the bearer <SubjectConfirmationData> equals the ID
-  of its original <AuthnRequest> message, unless the response is unsolicited (see Section 4.1.5 ), in
-  which case the attribute MUST NOT be present
-
   • Verify that any assertions relied upon are valid in other respects
-
-  • If any bearer <SubjectConfirmationData> includes an Address attribute, the service provider
-  MAY check the user agent's client address against it.
 
   • Any assertion which is not valid, or whose subject confirmation requirements cannot be met SHOULD
   be discarded and SHOULD NOT be used to establish a security context for the principal.
