@@ -98,10 +98,10 @@ Basic usage for responses from the IdP looks like this (assuming a Ring `request
 (-> request
     :params
     :SAML-response
-    (saml-decode/base64->str)
+    saml-decode/base64->str
     ;; Coerce the response to an OpenSAML `Response`. This can be anything from a raw XML string to a parsed
     ;; `org.w3c.dom.Document`
-    (saml/->Response)
+    saml/->Response
     ;; decrypt and validate the response. Returns decrypted response
     (saml/validate idp-cert sp-private-key options)
     ;; convert the Assertions to a convenient Clojure map so you can do something with them
