@@ -45,10 +45,11 @@
                                                                     {:algorithm signature-algorithm}))))
                         (.setCanonicalizationAlgorithm (or (get canonicalization-algorithms canonicalization-algorithm)
                                                            (throw (ex-info "No matching canonicalization algorithm"
-                                                                           {:algorithm canonicalization-algorithm})))))]
-        ;; TODO -- Add KeyInfo about the public key ???
-        ;; (when-let [cert (coerce/->X509Certificate credential)]
-        ;;   (.setKeyInfo (.getPublicKey cert)))
+                                                                           {:algorithm canonicalization-algorithm})))))
+            key-info-gen (doto (new org.opensaml.xmlsec.keyinfo.impl.X509KeyInfoGeneratorFactory)
+                           (.setEmitEntityCertificate true))]
+        (when-let [key-info (.generate (.newInstance key-info-gen) credential)] ; No need to test X509 coercion first
+          (.setKeyInfo signature key-info))
         (.setSignature object signature)
         (let [element (coerce/->Element object)]
           (org.opensaml.xmlsec.signature.support.Signer/signObject signature)
