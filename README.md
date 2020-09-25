@@ -89,14 +89,19 @@ The `:credential` can also reference a keystore using a map with the following p
 
 ### Responses
 
-Basic usage for responses from the IdP looks like:
+Basic usage for responses from the IdP looks like this (assuming a Ring `request`):
 
 ```clj
 (require '[saml20-clj.core :as saml])
+(require '[saml20-clj.encode-decode :as saml-decode])
 
-;; Coerce the response to an OpenSAML `Response`. This can be anything from a raw XML string to a parsed
-;; `org.w3c.dom.Document`
-(-> (saml/->Response xml)
+(-> request
+    :params
+    :SAML-response
+    (saml-decode/base64->str)
+    ;; Coerce the response to an OpenSAML `Response`. This can be anything from a raw XML string to a parsed
+    ;; `org.w3c.dom.Document`
+    (saml/->Response)
     ;; decrypt and validate the response. Returns decrypted response
     (saml/validate idp-cert sp-private-key options)
     ;; convert the Assertions to a convenient Clojure map so you can do something with them
