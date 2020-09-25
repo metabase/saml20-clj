@@ -62,7 +62,8 @@
 
      :exclude-linters
      [:deprecations
-      :unused-ret-vals]}}
+      :unused-ret-vals
+      :implicit-dependencies]}}
 
    :bikeshed
    {:plugins

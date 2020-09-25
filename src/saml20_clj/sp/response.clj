@@ -7,7 +7,8 @@
              [crypto :as crypto]
              [state :as state]
              [xml :as xml]])
-  (:import [org.opensaml.saml.saml2.core Assertion Attribute AttributeStatement Audience AudienceRestriction Response Subject SubjectConfirmation SubjectConfirmationData]))
+  (:import [org.opensaml.saml.saml2.core Assertion Attribute AttributeStatement Audience AudienceRestriction Response
+            Subject SubjectConfirmation SubjectConfirmationData]))
 
 (defn clone-response
   "Clone an OpenSAML `response` object."
@@ -15,6 +16,8 @@
   (coerce/->Response (xml/clone-document (.. response getDOM getOwnerDocument))))
 
 (defn decrypt-response
+  "Decrypt `response` using `sp-private-key` if it has encrypted Assertions. If it does not have encrypted assertions,
+  return `response` as-is."
   ^Response [response sp-private-key]
   ;; clone the response, otherwise decryption will be destructive.
   (when-let [response (coerce/->Response response)]
@@ -32,7 +35,8 @@
     (not-empty (.getAssertions response))))
 
 (defmulti validate-response
-  {:arglists '([validation encrypted-response unencryped-response options])}
+  "Perform a validation operation on a Response."
+  {:arglists '([validation possibly-encrypted-response unencryped-response options])}
   (fn [validation _ _ _]
     (keyword validation)))
 
@@ -80,6 +84,7 @@
        ~@body)))
 
 (defmulti validate-assertion
+  "Perform a validation operation on an Assertion."
   {:arglists '([validation response options])}
   (fn [validation _ _]
     (keyword validation)))
@@ -274,6 +279,9 @@
 
 (defn assertions
   "Returns the assertions (encrypted or not) of a SAML Response object"
-  [response sp-private-key]
-  (when-let [assertions (opensaml-assertions response sp-private-key)]
-    (map Assertion->map assertions)))
+  ([possibly-encrypted-response sp-private-key]
+   (assertions (decrypt-response possibly-encrypted-response sp-private-key)))
+
+  ([decrypted-response]
+   (when-let [assertions (opensaml-assertions decrypted-response)]
+     (map Assertion->map assertions))))

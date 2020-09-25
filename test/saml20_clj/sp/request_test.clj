@@ -31,7 +31,15 @@
                                           target-uri)))))
 
 (deftest request-test
-  (is (= ["<?xml version=\"1.0\" encoding=\"UTF-8\"?><samlp:AuthnRequest xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\" AssertionConsumerServiceURL=\"http://sp.example.com/demo1/index.php?acs\" Destination=\"http://idp.example.com/SSOService.php\" ID=\"ONELOGIN_809707f0030a5d00620c9d9df97f627afe9dcc24\" IssueInstant=\"2020-09-24T22:51:00Z\" ProtocolBinding=\"urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST\" ProviderName=\"SP test\" Version=\"2.0\">"
+  (is (= [(str "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+               "<samlp:AuthnRequest xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\""
+               " AssertionConsumerServiceURL=\"http://sp.example.com/demo1/index.php?acs\""
+               " Destination=\"http://idp.example.com/SSOService.php\""
+               " ID=\"ONELOGIN_809707f0030a5d00620c9d9df97f627afe9dcc24\""
+               " IssueInstant=\"2020-09-24T22:51:00Z\""
+               " ProtocolBinding=\"urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST\""
+               " ProviderName=\"SP test\""
+               " Version=\"2.0\">")
           "  <saml:Issuer xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\">http://sp.example.com/demo1/metadata.php</saml:Issuer>"
           "</samlp:AuthnRequest>"]
          (str/split-lines
@@ -45,7 +53,15 @@
                :issuer     "http://sp.example.com/demo1/metadata.php"}))))))
 
   (testing "should be able to create a signed request"
-    (is (= ["<?xml version=\"1.0\" encoding=\"UTF-8\"?><samlp:AuthnRequest xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\" AssertionConsumerServiceURL=\"http://sp.example.com/demo1/index.php?acs\" Destination=\"http://idp.example.com/SSOService.php\" ID=\"ONELOGIN_809707f0030a5d00620c9d9df97f627afe9dcc24\" IssueInstant=\"2020-09-24T22:51:00.000Z\" ProtocolBinding=\"urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST\" ProviderName=\"SP test\" Version=\"2.0\">"
+    (is (= [(str "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                 "<samlp:AuthnRequest xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\""
+                 " AssertionConsumerServiceURL=\"http://sp.example.com/demo1/index.php?acs\""
+                 " Destination=\"http://idp.example.com/SSOService.php\""
+                 " ID=\"ONELOGIN_809707f0030a5d00620c9d9df97f627afe9dcc24\""
+                 " IssueInstant=\"2020-09-24T22:51:00.000Z\""
+                 " ProtocolBinding=\"urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST\""
+                 " ProviderName=\"SP test\""
+                 " Version=\"2.0\">")
             "<saml:Issuer xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\">http://sp.example.com/demo1/metadata.php</saml:Issuer>"
             "<ds:Signature xmlns:ds=\"http://www.w3.org/2000/09/xmldsig#\">"
             "<ds:SignedInfo>"
