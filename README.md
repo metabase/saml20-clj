@@ -17,6 +17,28 @@ library](https://github.com/onelogin/java-saml) This library allows a Clojure ap
 
 ## 2.0.0 Usage
 
+### Creating metadata
+
+In order for an identityprovider to understand you as a service-provider, you need to provide metadata about your service. This is done in the following manner:
+
+```clojure
+(in-ns my-saml.core
+  (:require [saml20-clj.core :as saml-core]
+            [saml20-clj.coerce :as saml-coerce]))
+
+(def config {:app-name "My Fancy App"
+             :acs-url "https://my-app.com/saml/login"
+             :slo-url "https://my-app.com/saml/logout"}
+
+(def credentials {:alias "my-saml-secrets"
+                  :filename "path/to/keystorefile.jks"
+                  :password "s1krit"}
+
+(def metadata (-> {:sp-cert (saml-coerce/->X509Certificate credentials)}
+                  (merge config)
+                  saml-core/metadata)
+```
+
 ### Recording Requests
 
 You can keep track of which requests are in flight to determine whether responses correspond to valid requests we've

@@ -9,37 +9,6 @@
              [encode-decode :as encode-decode]
              [state :as state]]))
 
-;; TODO -- this should be moved to a separate "metadata" namespace??
-(defn metadata
-  "Create Metadata to send to the IdP to configure things? I think that's what this is for. Not sure."
-  ^String [app-name acs-uri certificate-str]
-  (coerce/->xml-string
-   [:md:EntityDescriptor {:xmlns:md "urn:oasis:names:tc:SAML:2.0:metadata"
-                          :ID       (str/replace acs-uri #"[:/]" "_")
-                          :entityID app-name}
-    [:md:SPSSODescriptor {:AuthnRequestsSigned        "true"
-                          :WantAssertionsSigned       "true"
-                          :protocolSupportEnumeration "urn:oasis:names:tc:SAML:2.0:protocol"}
-     [:md:KeyDescriptor  {:use "signing"}
-      [:ds:KeyInfo  {:xmlns:ds "http://www.w3.org/2000/09/xmldsig#"}
-       [:ds:X509Data
-        [:ds:X509Certificate certificate-str]]]]
-     [:md:KeyDescriptor  {:use "encryption"}
-      [:ds:KeyInfo  {:xmlns:ds "http://www.w3.org/2000/09/xmldsig#"}
-       [:ds:X509Data
-        [:ds:X509Certificate certificate-str]]]]
-     [:md:SingleLogoutService {:Binding "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
-                               :Location "https://example.org/saml/SingleLogout"}]
-     [:md:NameIDFormat "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"]
-     [:md:NameIDFormat "urn:oasis:names:tc:SAML:2.0:nameid-format:transient"]
-     [:md:NameIDFormat "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent"]
-     [:md:NameIDFormat "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified"]
-     [:md:NameIDFormat "urn:oasis:names:tc:SAML:1.1:nameid-format:X509SubjectName"]
-     [:md:AssertionConsumerService {:Binding   "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
-                                    :Location  acs-uri
-                                    :index     "0"
-                                    :isDefault "true"}]]]))
-
 (defn- format-instant
   "Converts a date-time to a SAML 2.0 time string."
   [instant]
@@ -60,8 +29,10 @@
                                 ;; If present, record the request
                                 state-manager
                                 ;; If present, we can sign the request
-                                credential]
-                         :or   {request-id (str (java.util.UUID/randomUUID))}}]
+                                credential
+                                instant]
+                         :or   {request-id (str (java.util.UUID/randomUUID))
+                                instant (t/instant)}}]
   (assert acs-url)
   (assert idp-url)
   (assert sp-name)
@@ -70,7 +41,7 @@
                                     {:xmlns:samlp                 "urn:oasis:names:tc:SAML:2.0:protocol"
                                      :ID                          request-id
                                      :Version                     "2.0"
-                                     :IssueInstant                (format-instant (t/instant))
+                                     :IssueInstant                (format-instant instant)
                                      :ProtocolBinding             "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
                                      :ProviderName                sp-name
                                      :IsPassive                   false

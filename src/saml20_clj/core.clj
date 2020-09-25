@@ -6,12 +6,14 @@
              [coerce :as coerce]
              [state :as state]]
             [saml20-clj.sp
+             [metadata :as metadata]
              [request :as request]
              [response :as response]]))
 
 ;; this is so the linter doesn't complain about unused namespaces.
 (comment
   coerce/keep-me
+  metadata/keep-me
   request/keep-me
   response/keep-me
   state/keep-me)
@@ -21,9 +23,11 @@
   ->Response
   ->xml-string]
 
+ [metadata
+  metadata]
+
  [request
   idp-redirect-response
-  metadata
   request]
 
  [response

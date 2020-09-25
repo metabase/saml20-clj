@@ -160,7 +160,14 @@
 
   org.opensaml.security.x509.BasicX509Credential
   (->X509Certificate [this]
-    (.getEntityCertificate this)))
+    (.getEntityCertificate this))
+
+  clojure.lang.IPersistentMap
+  (->X509Certificate
+    [{^String key-alias :alias, ^String password :password, :as m}]
+    (when (and key-alias password)
+      (when-let [keystore (keystore m)]
+        (.getCertificate keystore key-alias)))))
 
 (extend-protocol CoerceToCredential
   nil

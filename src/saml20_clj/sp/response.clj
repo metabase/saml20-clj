@@ -272,7 +272,7 @@
        :name-id      {:value  (some-> name-id .getValue)
                       :format (some-> name-id .getFormat)}
        :confirmation {:in-response-to  (.getInResponseTo subject-data)
-                      :not-before      (t/instant (.getNotBefore subject-data))
+                      :not-before      (some-> (.getNotBefore subject-data) (t/instant))
                       :not-on-or-after (t/instant (.getNotOnOrAfter subject-data))
                       :address         (.getAddress subject-data)
                       :recipient       (.getRecipient subject-data)}})))
