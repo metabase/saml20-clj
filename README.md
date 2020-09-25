@@ -17,6 +17,19 @@ library](https://github.com/onelogin/java-saml) This library allows a Clojure ap
 
 ## 2.0.0 Usage
 
+### Recording Requests
+
+You can keep track of which requests are in flight to determine whether responses correspond to valid requests we've
+issued and whether we've already got a response for a request (e.g. to replay attacks) by using a `StateManager`. This
+library ships with a simple in-memory state manager suitable for a single instance, but you can create your own
+implementation if you need something more sophisticated.
+
+```clj
+(require '[saml20-clj.core :as saml])
+
+(def state-manager (saml/in-memory-state-manager))
+```
+
 ### Requests
 
 Basic usage for requests to the IdP looks like:
@@ -30,8 +43,10 @@ Basic usage for requests to the IdP looks like:
       :acs-url          "http://sp.example.com/demo1/index.php?acs"
       :idp-url          "http://idp.example.com/SSOService.php"
       :issuer           "http://sp.example.com/demo1/metadata.php"
+      ;; state manager (discussed above) is optional, but if passed `request` will record the newly created request.
+      :state-manager    state-manager
       ;; :private-key is optional. If passed, sign the request with this key
-      :private-key      test/sp-private-key})
+      :private-key      sp-private-key})
     ;; create a Ring redirect response to the IDP URL; pass the request as base-64 encoded `SAMLRequest` query parameter
     (saml/idp-redirect-response "http://idp.example.com/SSOService.php"
                                 ;; This is RelayState. In the old version of the lib it was encrypted. In some cases,
@@ -62,26 +77,34 @@ Basic usage for responses from the IdP looks like:
 { ;; e.g. "http://sp.example.com/demo1/index.php?acs" The assertion consumer service URL. If this is not-nil, the
  ;; :recipient validator checks that <SubjectConfirmationData> nodes have a value of Recipient matching this value.
  :acs-url                      nil
+
  ;; The ID of the request we (the SP) sent to the IdP. ID is generated on our end, and should be something like a UUID
  ;; rather than a sequential number. If non-nil, the :in-response-to validator checks that <SubjectConfirmationData>
  ;; nodes have a value of InResponseTo that matches an ID.
  ;;
- ;; It's a good idea to record the fact that a response for this request ID has been received so a bad actor can't log
- ;; in with by replaying the same SAML response
+ ;; The state manager implementation that ships with this library does not keep request state; InResponseTo validation
+ ;; is provided as an option in case you write your own more sophisticated implementation.
  :request-id                   nil
+
+ ;; If passed, the state manager will
+ :state-manager
+
  ;; whether this response was solicited (i.e., in response to a request we sent to the IdP). If this is false, the
  ;; :in-response-to validator checks that the request-id is nil.
  :solicited?                   true
+
  ;; maximum amount of clock skew to allow for the :not-on-or-after and :not-before validators
  :allowable-clock-skew-seconds 180
+
  ;; address of the client. If set, the :address validator will check that <SubjectConfirmationData> nodes have an
  ;; Address matching this value *iff* Address is present. Address is optional attribute.
  :user-agent-address           nil
+
  ;; :response-validators and :assertion-validators are validation functions that run and check that the Response is
  ;; valid. If a check fails, these methods will throw an Exception. You can exclude some of these validators or add
  ;; your own by passing different values for these keys. Both types of validators are defined as multimethods; you can
  ;; add custom validators by adding more method implementations to their respective multimethods.
- ;;
+
  ;; :response-validators are validation functions that run once for the entire Response. They are defined as
  ;; implementations of the saml20-clj.sp.response/validate-response multimethod.
  :response-validators
@@ -90,8 +113,11 @@ Basic usage for responses from the IdP looks like:
   ;; IdP certificate. If Response is not signed, this validator does nothing.
   :signature
   ;; requires that either the <Response> is signed, *every* <Assertion> is signed.
-  :require-signature]
- ;;
+  :require-signature
+  ;; validates the request ID with :state-manager if it is passed as an option. This does not validate that the value
+  ;; matches InResponseTo -- that is done by :in-response-to.
+  :valid-request-id]
+
  ;; :assertion validators are validation functions that run against every Assertion in the response. They are defined
  ;; as implementations of saml20-clj.sp.response/validate-assertion.
  :assertion-validators

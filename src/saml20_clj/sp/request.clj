@@ -6,7 +6,8 @@
             [saml20-clj
              [coerce :as coerce]
              [crypto :as crypto]
-             [encode-decode :as encode-decode]]))
+             [encode-decode :as encode-decode]
+             [state :as state]]))
 
 ;; TODO -- this should be moved to a separate "metadata" namespace??
 (defn metadata
@@ -46,39 +47,44 @@
 
 (defn request
   "Return XML elements that represent a SAML 2.0 auth request."
-  [{:keys [;; e.g. something like a UUID
-           request-id
-           ;; e.g. "Metabase"
-           sp-name
-           ;; e.g. ttp://sp.example.com/demo1/index.php?acs
-           acs-url
-           ;; e.g. http://sp.example.com/demo1/index.php?acs
-           idp-url
-           ;; e.g. http://idp.example.com/SSOService.php
-           issuer
-           ;; If present, we can sign the request
-           private-key]
-    :or   {request-id (str (java.util.UUID/randomUUID))}}]
+  ^org.w3c.dom.Element [{:keys [ ;; e.g. something like a UUID
+                                request-id
+                                ;; e.g. "Metabase"
+                                sp-name
+                                ;; e.g. ttp://sp.example.com/demo1/index.php?acs
+                                acs-url
+                                ;; e.g. http://sp.example.com/demo1/index.php?acs
+                                idp-url
+                                ;; e.g. http://idp.example.com/SSOService.php
+                                issuer
+                                ;; If present, record the request
+                                state-manager
+                                ;; If present, we can sign the request
+                                private-key]
+                         :or   {request-id (str (java.util.UUID/randomUUID))}}]
   (assert acs-url)
   (assert idp-url)
   (assert sp-name)
-  (cond-> (coerce/->Element (hiccup/html
-                             [:samlp:AuthnRequest
-                              {:xmlns:samlp                 "urn:oasis:names:tc:SAML:2.0:protocol"
-                               :ID                          request-id
-                               :Version                     "2.0"
-                               :IssueInstant                (format-instant (t/instant))
-                               :ProtocolBinding             "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
-                               :ProviderName                sp-name
-                               :IsPassive                   false
-                               :Destination                 idp-url
-                               :AssertionConsumerServiceURL acs-url}
-                              [:saml:Issuer
-                               {:xmlns:saml "urn:oasis:names:tc:SAML:2.0:assertion"}
-                               issuer]
-                              ;;[:samlp:NameIDPolicy {:AllowCreate false :Format saml-format}]
-                              ]))
-    private-key (crypto/sign private-key)))
+  (let [request (coerce/->Element (hiccup/html
+                                   [:samlp:AuthnRequest
+                                    {:xmlns:samlp                 "urn:oasis:names:tc:SAML:2.0:protocol"
+                                     :ID                          request-id
+                                     :Version                     "2.0"
+                                     :IssueInstant                (format-instant (t/instant))
+                                     :ProtocolBinding             "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
+                                     :ProviderName                sp-name
+                                     :IsPassive                   false
+                                     :Destination                 idp-url
+                                     :AssertionConsumerServiceURL acs-url}
+                                    [:saml:Issuer
+                                     {:xmlns:saml "urn:oasis:names:tc:SAML:2.0:assertion"}
+                                     issuer]
+                                    ;;[:samlp:NameIDPolicy {:AllowCreate false :Format saml-format}]
+                                    ]))]
+    (when state-manager
+      (state/record-request! state-manager (.getAttribute request "ID")))
+    (cond-> request
+      private-key (crypto/sign private-key))))
 
 (defn uri-query-str
   ^String [clean-hash]

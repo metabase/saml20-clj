@@ -5,9 +5,9 @@
             [saml20-clj
              [coerce :as coerce]
              [crypto :as crypto]
+             [state :as state]
              [xml :as xml]])
-  (:import [org.opensaml.saml.saml2.core Assertion Attribute AttributeStatement Audience AudienceRestriction Response
-            Subject SubjectConfirmation SubjectConfirmationData]))
+  (:import [org.opensaml.saml.saml2.core Assertion Attribute AttributeStatement Audience AudienceRestriction Response Subject SubjectConfirmation SubjectConfirmationData]))
 
 (defn clone-response
   "Clone an OpenSAML `response` object."
@@ -49,6 +49,14 @@
     (let [assertions (opensaml-assertions decrypted-response)]
       (assert (seq assertions) "Unsigned response has no assertions (no signatures can be verified)")
       (assert (every? crypto/signed? assertions) "Neither response nor assertion(s) are signed"))))
+
+(defmethod validate-response :valid-request-id
+  [_ _ ^Response decrypted-response {:keys [state-manager]}]
+  (when state-manager
+    (let [request-id (.getInResponseTo decrypted-response)]
+      (when-not request-id
+        (throw (ex-info "<Response> is missing InResponseTo attribute" {})))
+      (state/accept-response! state-manager request-id))))
 
 ;;
 ;; Subject Confirmation Data Checks
@@ -160,30 +168,35 @@
                           {:data       (coerce/->xml-string data)
                            :request-id user-agent-address})))))))
 
+(def default-validation-options
+  {:response-validators  [:signature
+                          :require-signature
+                          :valid-request-id]
+   :assertion-validators [:signature
+                          :recipient
+                          :not-on-or-after
+                          :not-before
+                          :in-response-to
+                          :address]})
+
 (defn validate
   "Validate response. Returns decrypted response if valid."
-  [response idp-cert sp-private-key {:keys [response-validators
-                                            assertion-validators]
-                                     :or   {response-validators  [:signature
-                                                                  :require-signature]
-                                            assertion-validators [:signature
-                                                                  :recipient
-                                                                  :not-on-or-after
-                                                                  :not-before
-                                                                  :in-response-to
-                                                                  :address]}
-                                     :as   options}]
-  (when-let [response (coerce/->Response response)]
-    (let [decrypted-response (if sp-private-key
-                               (decrypt-response response sp-private-key)
-                               response)
-          options            (assoc options :idp-cert (coerce/->Credential idp-cert))]
-      (doseq [validator response-validators]
-        (validate-response validator response decrypted-response options))
-      (doseq [assertion (opensaml-assertions decrypted-response)
-              validator assertion-validators]
-        (validate-assertion validator assertion options))
-      decrypted-response)))
+  ([response idp-cert sp-private-key]
+   (validate response idp-cert sp-private-key nil))
+
+  ([response idp-cert sp-private-key options]
+   (let [{:keys [response-validators assertion-validators], :as options} (-> (merge default-validation-options options)
+                                                                             (assoc :idp-cert (coerce/->Credential idp-cert)))]
+     (when-let [response (coerce/->Response response)]
+       (let [decrypted-response (if sp-private-key
+                                  (decrypt-response response sp-private-key)
+                                  response)]
+         (doseq [validator response-validators]
+           (validate-response validator response decrypted-response options))
+         (doseq [assertion (opensaml-assertions decrypted-response)
+                 validator assertion-validators]
+           (validate-assertion validator assertion options))
+         decrypted-response)))))
 
 
 ;;; +----------------------------------------------------------------------------------------------------------------+

@@ -230,7 +230,7 @@
 
   String
   (->Element [this]
-    (saml.xml/str->xmldoc this))
+    (->Element (saml.xml/str->xmldoc this)))
 
   ;; hiccup-style xml element
   ;; TODO -- it's a little inefficient to serialize this to a string and then back to an element

@@ -31,6 +31,7 @@
    [org.opensaml/opensaml-xmlsec-api "3.4.5"]
    [org.opensaml/opensaml-xmlsec-impl "3.4.5"]
    [potemkin "0.4.5"]
+   [pretty "1.0.4"]
    [ring/ring-codec "1.1.2"]
    [robdaemon/clojure.java-time "0.3.3-SNAPSHOT"]]
 
