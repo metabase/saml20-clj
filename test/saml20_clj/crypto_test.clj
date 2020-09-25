@@ -15,7 +15,7 @@
                      :acs-url     "http://sp.example.com/demo1/index.php?acs"
                      :idp-url     "http://idp.example.com/SSOService.php"
                      :issuer      "http://sp.example.com/demo1/metadata.php"
-                     :private-key test/sp-private-key}))]
+                     :credential  test/sp-private-key}))]
       (is (= :valid
              (crypto/assert-signature-valid-when-present signed test/sp-cert)))
       (testing "Wrong certificate"

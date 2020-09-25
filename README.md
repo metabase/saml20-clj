@@ -45,8 +45,8 @@ Basic usage for requests to the IdP looks like:
       :issuer           "http://sp.example.com/demo1/metadata.php"
       ;; state manager (discussed above) is optional, but if passed `request` will record the newly created request.
       :state-manager    state-manager
-      ;; :private-key is optional. If passed, sign the request with this key
-      :private-key      sp-private-key})
+      ;; :credential is optional. If passed, sign the request with this key and attach public key data, if present
+      :credential       sp-private-key})
     ;; create a Ring redirect response to the IDP URL; pass the request as base-64 encoded `SAMLRequest` query parameter
     (saml/idp-redirect-response "http://idp.example.com/SSOService.php"
                                 ;; This is RelayState. In the old version of the lib it was encrypted. In some cases,
@@ -54,6 +54,16 @@ Basic usage for requests to the IdP looks like:
                                 ;; automatic encryption support back is on the TODO list
                                 "http://sp.example.com/please/redirect/me/to/here"))
 ```
+
+The `:credential` can be used to sign the request to the IdP, and attach any public key information (if present). It will
+happily accept several formats, depending on the use-case:
+  - `private-key`: A PEM formatted string
+  - `[public-cert private-key]`: A tuple containing an X509 Certificate and a private key, both in PEM format
+  
+The `:credential` can also reference a keystore using a map with the following parameters:
+  - `{:filepath "/path/to/keystore"
+      :password "keystore-password"
+      :alias    "key-alias"}`
 
 ### Responses
 
