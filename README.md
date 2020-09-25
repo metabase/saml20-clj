@@ -109,11 +109,14 @@ Basic usage for responses from the IdP looks like:
  ;; implementations of the saml20-clj.sp.response/validate-response multimethod.
  :response-validators
  ;; The default Response validators are:
+
  [;; If the <Response> itself is signed, verifies that this signature is matches the Response itself and matches the
   ;; IdP certificate. If Response is not signed, this validator does nothing.
   :signature
+
   ;; requires that either the <Response> is signed, *every* <Assertion> is signed.
   :require-signature
+
   ;; validates the request ID with :state-manager if it is passed as an option. This does not validate that the value
   ;; matches InResponseTo -- that is done by :in-response-to.
   :valid-request-id]
@@ -121,34 +124,38 @@ Basic usage for responses from the IdP looks like:
  ;; :assertion validators are validation functions that run against every Assertion in the response. They are defined
  ;; as implementations of saml20-clj.sp.response/validate-assertion.
  :assertion-validators
+
  ;; The default Assertion validators are:
  [;; If <Assertion> is signed, the signature matches the Assertion and the IdP certificate. If <Assertion> is not
   ;; signed, this validator does nothing.
   :signature
+
   ;; If :acs-url is non-nil, and <SubjectConfirmationData> is present, checks that <SubjectConfirmationData> has a
   ;; Recipient attribute matching this value.
   :recipient
+
   ;; If <SubjectConfirmationData> is present, has a NotOnOrAfter attribute, and its value is in the future,
   ;; accounting for :allowable-clock-skew-seconds
   :not-on-or-after
+
   ;; If <SubjectConfirmationData> has a NotBefore attribute, checks that this value is in the past, accounting for
   ;; :allowable-clock-skew-seconds
   :not-before
+
   ;; If :request-id is non-nil and <SubjectConfirmationData> is present, checks that <SubjectConfirmationData> has an
   ;; InResponseTo attribute matching :request-id.
   :in-response-to
+
   ;; If :user-agent-address is non-nil and <SubjectConfirmationData> has an Address attribute, checks that Address
   ;; matches this value.
   :address]}
 ```
 
-*September 23rd 2020*: This library is currently in the process of being reworked with a new API that makes 200% more
-sense. Dox will be updated in the near future once the 2.0.0 release is finalized.
-
 ## Differences from the original `saml20-clj` library
 
-*  See [quephird/saml-test](https://github.com/quephird/saml-test) for the usage.
-*  This repository is forked from [vlacs/saml20-clj](https://github.com/vlacs/saml20-clj), and adds:
+This repository is forked from [vlacs/saml20-clj](https://github.com/vlacs/saml20-clj), and at this point is more or less a complete re-write.
+
+*  Other improvements:
    *  Uses OpenSAML v3 instead of OpenSAML v2 which was EOL'ed in 2016
    *  Tons of bug fixes, such as `saml20-clj.shared/base64->inflate->str` not actually calling `byte-inflate` at all
    *  Fixed millions of reflection warnings
@@ -159,6 +166,7 @@ sense. Dox will be updated in the near future once the 2.0.0 release is finalize
    *  Removed lots of dependencies on other libraries
    *  Reorganized code
    *  Removed tons of duplicate/unnecessary, untested code
+   *  Fixed `<Assertion>` signatures not being validated
 
 ## License
 

@@ -1,8 +1,0 @@
-{:base-uri "http://localhost:8080/"
- :app-name "saml20-clj"
- :idp-uri "https://idp.yourwebsite.com/saml20"
- :idp-cert "PEM x509 cert."
- :keystore-file nil
- :keystore-password nil
- :key-alias nil
- :format ""}
