@@ -59,6 +59,10 @@
   [_]
   (sample-file "response-with-signed-message.xml"))
 
+(defmethod response {:malicious-signature? true}
+  [_]
+  (sample-file "response-with-swapped-signature.xml"))
+
 (defmethod response {:assertion-signed? true}
   [_]
   (sample-file "response-with-signed-assertion.xml"))
@@ -100,12 +104,16 @@
 (defn invalid-confirmation-data? [response-map]
   ((some-fn :invalid-confirmation-data?) response-map))
 
+(defn malicious-signature? [response-map]
+  ((some-fn :malicious-signature?) response-map))
+
 (defn describe-response-map
   "Human-readable string description of a response map (from `responses`), useful for `testing` context when writing
   test code that loops over various responses."
-  [{:keys [message-signed? assertion-signed? assertion-encrypted? valid-confirmation-data? invalid-confirmation-data?], :as m}]
-  (format "Response with %s message, %s%s %s assertion\n%s"
+  [{:keys [message-signed? malicious-signature? assertion-signed? assertion-encrypted? valid-confirmation-data? invalid-confirmation-data?], :as m}]
+  (format "Response with %s message, %s %s%s %s assertion\n%s"
           (if message-signed? "SIGNED" "unsigned")
+          (if malicious-signature? "MALICIOUS" "not-malicious")
           (cond valid-confirmation-data?   "VALID confirmation data, "
                 invalid-confirmation-data? "INVALID confiration data, "
                 :else                      "")
