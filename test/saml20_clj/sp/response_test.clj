@@ -88,6 +88,31 @@
                 {:response-validators  [:signature :require-signature]
                  :assertion-validators [:signature]}))))))))
 
+(deftest assert-encrypted-assertions-test
+  (testing "unencrypted assertions should fail"
+    (doseq [{:keys [response], :as response-map} (test/responses)
+            :when                                (not (test/assertions-encrypted? response-map))]
+      (testing (test/describe-response-map response-map)
+        (is (thrown-with-msg?
+             clojure.lang.ExceptionInfo
+             #"Unencrypted assertions present in response body"
+             (response/validate response test/idp-cert test/sp-private-key {:assertion-validators [:require-encryption]})))))
+
+    (doseq [{:keys [response], :as response-map} (test/responses)
+            :when                                (test/assertions-encrypted? response-map)]
+      (testing (test/describe-response-map response-map)
+        (is (instance? Response
+                       (response/validate response test/idp-cert test/sp-private-key {:response-validators         []
+                                                                                      :assertion-validators        [:require-encryption]})))))))
+
+(deftest test-move-validator-config-helper
+  (is (= {:foo true :response-validators []}
+         (#'response/move-validator-config {:response-validators [:foo]} :response-validators :foo)))
+  (is (= {:foo true :response-validators [:bar]}
+         (#'response/move-validator-config {:response-validators [:foo :bar]} :response-validators :foo)))
+  (is (= {:response-validators [:bar]}
+         (#'response/move-validator-config {:response-validators [:bar]} :response-validators :foo))))
+
 ;;
 ;; Subject Confirmation Data Verifications
 ;;

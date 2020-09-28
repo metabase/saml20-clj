@@ -28,6 +28,14 @@
         (crypto/recursive-decrypt! sp-private-key element)
         (coerce/->Response element)))))
 
+(defn ensure-encrypted-assertions
+  ^Response [response]
+  (when-let [response (coerce/->Response response)]
+    (let [num-assertions           (count (.getAssertions response))
+          num-encrypted-assertions (count (.getEncryptedAssertions response))]
+      (when (> num-assertions num-encrypted-assertions)
+        (throw (ex-info "Unencrypted assertions present in response body" {}))))))
+
 (defn opensaml-assertions
   [response]
   (when-let [response (coerce/->Response response)]
@@ -184,6 +192,17 @@
                           :in-response-to
                           :address]})
 
+(defn- move-validator-config
+  "Raises one of the validation settings from a nested map up into the main config.
+  Because we dispatch on the validator keywords, but only after decrypting the response,
+  we use this to preserve the config setting without having to implement a dummy method"
+  [options validator-type validator]
+  (if-let [config-setting (some #(= validator %) (get options validator-type))]
+    (-> options
+        (update-in [validator-type] (fn [e] (remove #(= % validator) e)))
+        (assoc validator true))
+    options))
+
 (defn validate
   "Validate response. Returns decrypted response if valid."
   ([response idp-cert sp-private-key]
@@ -191,7 +210,10 @@
 
   ([response idp-cert sp-private-key options]
    (let [{:keys [response-validators assertion-validators], :as options} (-> (merge default-validation-options options)
-                                                                             (assoc :idp-cert (coerce/->Credential idp-cert)))]
+                                                                             (assoc :idp-cert (coerce/->Credential idp-cert))
+                                                                             (move-validator-config :assertion-validators :require-encryption))]
+     (when (:require-encryption options)
+       (ensure-encrypted-assertions response))
      (when-let [response (coerce/->Response response)]
        (let [decrypted-response (if sp-private-key
                                   (decrypt-response response sp-private-key)

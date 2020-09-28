@@ -94,6 +94,9 @@
 (defn signed? [response-map]
   ((some-fn :message-signed? :assertion-signed?) response-map))
 
+(defn assertions-encrypted? [response-map]
+  ((some-fn :assertion-encrypted?) response-map))
+
 (defn valid-confirmation-data? [response-map]
   ((some-fn :valid-confirmation-data?) response-map))
 
