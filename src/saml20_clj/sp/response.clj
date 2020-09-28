@@ -100,16 +100,18 @@
 ;; service URL to which the `<Response>` or artifact was delivered.
 (defmethod validate-assertion :recipient
   [_ assertion {:keys [acs-url]}]
-  (when acs-url
-    (validate-confirmation-datas [data assertion]
-      (let [recipient (.getRecipient data)]
-        ;; Recipient field is REQUIRED if <SubjectConfirmationData> is present.
-        (when-not recipient
-          (throw (ex-info "<SubjectConfirmationData> does not contain a Recipient"
-                          {:data (coerce/->xml-string data)})))
-        (when-not (= recipient acs-url)
-          (throw (ex-info "<SubjectConfirmationData> Recipient does not match assertion consumer service URL"
-                          {:data (coerce/->xml-string data), :acs-url acs-url})))))))
+  (validate-confirmation-datas [data assertion]
+    (let [recipient (.getRecipient data)]
+    ;; Recipient field is REQUIRED if <SubjectConfirmationData> is present.
+      (when-not recipient
+        (throw (ex-info "<SubjectConfirmationData> does not contain a Recipient"
+                        {:data (coerce/->xml-string data)})))
+      (when-not acs-url
+        (throw (ex-info "<SubjectConfirmationData> contains a Recipient but an acs-url was not passed to validate against"
+                        {:data (coerce/->xml-string data)})))
+      (when-not (= recipient acs-url)
+        (throw (ex-info "<SubjectConfirmationData> Recipient does not match assertion consumer service URL"
+                        {:data (coerce/->xml-string data), :acs-url acs-url}))))))
 
 ;; Verify that the NotOnOrAfter attribute in any bearer <SubjectConfirmationData> has not passed, subject to allowable
 ;; clock skew between the providers
@@ -157,7 +159,7 @@
             (throw (ex-info "<SubjectConfirmationData> InResponseTo does not match request-id"
                             {:data       (coerce/->xml-string data)
                              :request-id request-id})))
-          (when request-id
+          (when in-response-to
             (throw (ex-info "<SubjectConfirmationData> InResponseTo should not be present for an unsolicited request"
                             {:data       (coerce/->xml-string data)
                              :request-id request-id}))))))))
