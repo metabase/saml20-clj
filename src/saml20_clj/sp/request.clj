@@ -13,17 +13,21 @@
   [instant]
   (t/format (t/format "YYYY-MM-dd'T'HH:mm:ss'Z'" (t/offset-date-time instant (t/zone-offset 0)))))
 
+(defn- non-blank-string? [s]
+  (and (string? s)
+       (not (str/blank? s))))
+
 (defn request
   "Return XML elements that represent a SAML 2.0 auth request."
-  ^org.w3c.dom.Element [{:keys [ ;; e.g. something like a UUID
+  ^org.w3c.dom.Element [{:keys [ ;; e.g. something like a UUID. Random UUID will be used if no other ID is provided
                                 request-id
                                 ;; e.g. "Metabase"
                                 sp-name
-                                ;; e.g. ttp://sp.example.com/demo1/index.php?acs
-                                acs-url
                                 ;; e.g. http://sp.example.com/demo1/index.php?acs
-                                idp-url
+                                acs-url
                                 ;; e.g. http://idp.example.com/SSOService.php
+                                idp-url
+                                ;; e.g. http://sp.example.com/demo1/metadata.php
                                 issuer
                                 ;; If present, record the request
                                 state-manager
@@ -32,9 +36,10 @@
                                 instant]
                          :or   {request-id (str (java.util.UUID/randomUUID))
                                 instant (t/instant)}}]
-  (assert acs-url)
-  (assert idp-url)
-  (assert sp-name)
+  (assert (non-blank-string? acs-url) "acs-url is required")
+  (assert (non-blank-string? idp-url) "idp-url is required")
+  (assert (non-blank-string? sp-name) "sp-name is required")
+  (assert (non-blank-string? issuer) "issuer is required")
   (let [request (coerce/->Element (coerce/->xml-string
                                    [:samlp:AuthnRequest
                                     {:xmlns:samlp                 "urn:oasis:names:tc:SAML:2.0:protocol"

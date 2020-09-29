@@ -156,3 +156,40 @@
                 ;; for some reason it indents the XML differently on the REPL and in the tests
                 (map str/trim)
                 (filter seq))))))
+
+(deftest request-validation-test
+  (let [request {:acs-url    "http://sp.example.com/demo1/index.php?acs"
+                 :sp-name    "My Example SP"
+                 :idp-url    "http://idp.example.com/SSOService.php"
+                 :issuer     "http://sp.example.com/demo1/metadata.php"
+                 :request-id "_1"
+                 :instant    (t/instant "2020-09-29T20:12:00.000Z")}]
+    (testing "Make sure we can create a valid request given the input"
+      (is (= (str "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                  "<samlp:AuthnRequest"
+                  " xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\""
+                  " AssertionConsumerServiceURL=\"http://sp.example.com/demo1/index.php?acs\""
+                  " Destination=\"http://idp.example.com/SSOService.php\" ID=\"_1\""
+                  " IssueInstant=\"2020-09-29T20:12:00Z\""
+                  " ProtocolBinding=\"urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST\""
+                  " ProviderName=\"My Example SP\""
+                  " Version=\"2.0\">"
+                  "<saml:Issuer xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\">"
+                  "http://sp.example.com/demo1/metadata.php"
+                  "</saml:Issuer>"
+                  "</samlp:AuthnRequest>")
+             (-> (request/request request)
+                 coerce/->xml-string
+                 (str/replace #"\n\s*" "")))))
+    (testing "Should validate that required params are non-blank strings"
+      (doseq [k [:acs-url
+                 :sp-name
+                 :idp-url
+                 :issuer]]
+        (doseq [v [nil "" "    " false true 100]]
+          (testing (format "\n%s = %s" k (pr-str v))
+            (let [request (assoc request k v)]
+              (is (thrown-with-msg?
+                   java.lang.AssertionError
+                   (re-pattern (format "%s is required" (name k)))
+                   (request/request request))))))))))
