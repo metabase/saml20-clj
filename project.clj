@@ -21,8 +21,10 @@
   [["opensaml" "https://build.shibboleth.net/nexus/content/repositories/releases/"]]
 
   :dependencies
-  [[org.clojure/tools.logging "1.1.0"]
+  [[org.clojure/spec.alpha "0.2.187"]
+   [org.clojure/tools.logging "1.1.0"]
    [com.onelogin/java-saml "2.5.0"]
+   [clojure.java-time "0.3.2"]
    [commons-io/commons-io "2.8.0"]
    [hiccup "1.0.5"]
    [org.opensaml/opensaml-core "3.4.5"]
@@ -32,8 +34,7 @@
    [org.opensaml/opensaml-xmlsec-impl "3.4.5"]
    [potemkin "0.4.5"]
    [pretty "1.0.4"]
-   [ring/ring-codec "1.1.2"]
-   [clojure.java-time "0.3.2"]]
+   [ring/ring-codec "1.1.2"]]
 
   :profiles
   {:dev
