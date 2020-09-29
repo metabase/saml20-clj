@@ -84,13 +84,14 @@ jobs:
           no_output_timeout: 5m
       - steps: << parameters.after-steps >>
 
-  deploy:
+  reflection-warnings:
     executor: default
     steps:
       - attach-workspace
+      - restore-deps-cache
       - run:
-          name: Deploy to clojars
-          command: lein deploy clojars
+          command: ./check-for-reflection-warnings.sh
+          no_output_timeout: 3m
 
 
 ########################################################################################################################
@@ -148,7 +149,12 @@ workflows:
                 name: Upload code coverage to codecov.io
                 command: bash <(curl -s https://codecov.io/bash)
 
-      - deploy:
+      - reflection-warnings:
+          requires:
+            - deps
+
+      - lein:
+          name: deploy
           requires:
             - bikeshed
             - eastwood
@@ -156,6 +162,8 @@ workflows:
             - tests
             - tests-java-11
             - cloverage
+            - reflection-warnings
+          lein-command: deploy clojars
           filters:
             branches:
               only: master

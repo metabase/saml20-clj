@@ -65,6 +65,9 @@
       :unused-ret-vals
       :implicit-dependencies]}}
 
+   :reflection-warnings
+   {:global-vars {*warn-on-reflection* true}}
+
    :bikeshed
    {:plugins
     [[lein-bikeshed "0.5.2"]]}
