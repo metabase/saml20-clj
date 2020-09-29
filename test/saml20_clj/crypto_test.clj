@@ -1,11 +1,10 @@
 (ns saml20-clj.crypto-test
   (:require [clojure.test :refer :all]
             [java-time :as t]
-            [saml20-clj
-             [coerce :as coerce]
-             [crypto :as crypto]
-             [test :as test]]
-            [saml20-clj.sp.request :as request]))
+            [saml20-clj.coerce :as coerce]
+            [saml20-clj.crypto :as crypto]
+            [saml20-clj.sp.request :as request]
+            [saml20-clj.test :as test]))
 
 (deftest sign-request-test
   (testing "Signature should be valid when signing request"

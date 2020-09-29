@@ -1,12 +1,10 @@
 (ns saml20-clj.coerce
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
-            [hiccup
-             [core :as hiccup]
-             [page :as h.page]]
-            [saml20-clj
-             [encode-decode :as encode-decode]
-             [xml :as saml.xml]]))
+            [hiccup.core :as hiccup]
+            [hiccup.page :as h.page]
+            [saml20-clj.encode-decode :as encode-decode]
+            [saml20-clj.xml :as saml.xml]))
 
 ;; these have to be initialized before using.
 ;;

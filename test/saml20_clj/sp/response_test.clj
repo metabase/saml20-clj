@@ -1,10 +1,9 @@
 (ns saml20-clj.sp.response-test
   (:require [clojure.test :refer :all]
             [java-time :as t]
-            [saml20-clj
-             [coerce :as coerce]
-             [test :as test]]
-            [saml20-clj.sp.response :as response])
+            [saml20-clj.coerce :as coerce]
+            [saml20-clj.sp.response :as response]
+            [saml20-clj.test :as test])
   (:import org.opensaml.saml.saml2.core.Response))
 
 (deftest response-status-test

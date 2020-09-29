@@ -1,8 +1,7 @@
 (ns saml20-clj.coerce-test
   (:require [clojure.test :refer :all]
-            [saml20-clj
-             [coerce :as coerce]
-             [test :as test]]))
+            [saml20-clj.coerce :as coerce]
+            [saml20-clj.test :as test]))
 
 (defn- key-fingerprint [^java.security.Key k]
   (when k

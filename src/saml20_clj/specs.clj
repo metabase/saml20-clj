@@ -1,11 +1,9 @@
 (ns saml20-clj.specs
   (:require [clojure.spec.alpha :as s]
-            [saml20-clj
-             [coerce :as coerce]
-             [state :as state]]
-            [saml20-clj.sp
-             [metadata :as metadata]
-             [request :as request]])
+            [saml20-clj.coerce :as coerce]
+            [saml20-clj.sp.metadata :as metadata]
+            [saml20-clj.sp.request :as request]
+            [saml20-clj.state :as state])
   (:import java.net.URL
            javax.security.cert.X509Certificate
            org.opensaml.security.credential.Credential

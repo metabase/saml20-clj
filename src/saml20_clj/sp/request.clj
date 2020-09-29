@@ -2,11 +2,10 @@
   (:require [clojure.string :as str]
             [java-time :as t]
             [ring.util.codec :as codec]
-            [saml20-clj
-             [coerce :as coerce]
-             [crypto :as crypto]
-             [encode-decode :as encode-decode]
-             [state :as state]]))
+            [saml20-clj.coerce :as coerce]
+            [saml20-clj.crypto :as crypto]
+            [saml20-clj.encode-decode :as encode-decode]
+            [saml20-clj.state :as state]))
 
 (defn- format-instant
   "Converts a date-time to a SAML 2.0 time string."

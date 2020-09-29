@@ -1,12 +1,10 @@
 (ns saml20-clj.state-test
   (:require [clojure.test :refer :all]
             [java-time :as t]
-            [saml20-clj
-             [coerce :as coerce]
-             [state :as state]]
-            [saml20-clj.sp
-             [request :as request]
-             [response :as response]]))
+            [saml20-clj.coerce :as coerce]
+            [saml20-clj.sp.request :as request]
+            [saml20-clj.sp.response :as response]
+            [saml20-clj.state :as state]))
 
 (deftest in-memory-state-manager-test
   (let [m (state/in-memory-state-manager)]

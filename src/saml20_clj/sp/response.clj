@@ -2,11 +2,10 @@
   "Code for parsing the XML response (as a String)from the IdP to an OpenSAML `Response`, and for basic operations like
   validating the signature and reading assertions."
   (:require [java-time :as t]
-            [saml20-clj
-             [coerce :as coerce]
-             [crypto :as crypto]
-             [state :as state]
-             [xml :as xml]])
+            [saml20-clj.coerce :as coerce]
+            [saml20-clj.crypto :as crypto]
+            [saml20-clj.state :as state]
+            [saml20-clj.xml :as xml])
   (:import [org.opensaml.saml.saml2.core Assertion Attribute AttributeStatement Audience AudienceRestriction Response
             Subject SubjectConfirmation SubjectConfirmationData]))
 

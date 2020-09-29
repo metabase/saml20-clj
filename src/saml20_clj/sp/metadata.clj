@@ -1,8 +1,7 @@
 (ns saml20-clj.sp.metadata
   (:require [clojure.string :as str]
-            [saml20-clj
-             [coerce :as coerce]
-             [encode-decode :as encode]]))
+            [saml20-clj.coerce :as coerce]
+            [saml20-clj.encode-decode :as encode]))
 
 (defn metadata [{:keys [app-name acs-url slo-url sp-cert
                         requests-signed

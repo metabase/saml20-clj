@@ -2,14 +2,12 @@
   "Main interface for saml20-clj SP functionality. The core functionality is broken out into several separate
   namespaces, but vars are made available here via Potemkin."
   (:require [potemkin :as p]
-            [saml20-clj
-             [coerce :as coerce]
-             [encode-decode :as encode]
-             [state :as state]]
-            [saml20-clj.sp
-             [metadata :as metadata]
-             [request :as request]
-             [response :as response]]))
+            [saml20-clj.coerce :as coerce]
+            [saml20-clj.encode-decode :as encode]
+            [saml20-clj.sp.metadata :as metadata]
+            [saml20-clj.sp.request :as request]
+            [saml20-clj.sp.response :as response]
+            [saml20-clj.state :as state]))
 
 ;; this is so the linter doesn't complain about unused namespaces.
 (comment

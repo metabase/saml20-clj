@@ -76,7 +76,7 @@
    :check-namespace-decls
    {:plugins               [[lein-check-namespace-decls "1.0.2"]]
     :source-paths          ["test"]
-    :check-namespace-decls {:prefix-rewriting true}}
+    :check-namespace-decls {:prefix-rewriting false}}
 
    :cloverage
    ;; Using Cam's fork of Cloverage until 1.2.1 of the main repo is out. Once that's released we can switch back.

@@ -1,12 +1,10 @@
 (ns saml20-clj.sp.request-test
-  (:require [clojure
-             [string :as str]
-             [test :refer :all]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer :all]
             [java-time :as t]
-            [saml20-clj
-             [coerce :as coerce]
-             [test :as test]]
-            [saml20-clj.sp.request :as request]))
+            [saml20-clj.coerce :as coerce]
+            [saml20-clj.sp.request :as request]
+            [saml20-clj.test :as test]))
 
 (def target-uri "http://sp.example.com/demo1/index.php?acs")
 
