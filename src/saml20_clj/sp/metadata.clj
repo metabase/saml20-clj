@@ -2,14 +2,15 @@
   (:require [clojure.string :as str]
             [saml20-clj
              [coerce :as coerce]
-             [encode-decode :as encode]]))
+             [encode-decode :as encode]])
+  (:import java.security.cert.X509Certificate))
 
 (defn metadata [{:keys [app-name acs-url slo-url sp-cert
                         requests-signed
                         want-assertions-signed]
                  :or {want-assertions-signed true
                       requests-signed true}}]
-  (let [encoded-cert (some-> ^java.security.cert.X509Certificate sp-cert
+  (let [encoded-cert (some-> ^X509Certificate sp-cert
                              .getEncoded
                              encode/encode-base64
                              encode/bytes->str)]

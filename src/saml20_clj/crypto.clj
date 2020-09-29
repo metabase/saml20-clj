@@ -1,8 +1,16 @@
 (ns saml20-clj.crypto
   (:require [saml20-clj.coerce :as coerce])
-  (:import org.apache.xml.security.Init
+  (:import com.onelogin.saml2.util.Util
+           [java.security PrivateKey SecureRandom]
+           javax.crypto.spec.SecretKeySpec
+           org.apache.xml.security.Init
+           org.opensaml.saml.common.SignableSAMLObject
+           org.opensaml.saml.security.impl.SAMLSignatureProfileValidator
            org.opensaml.security.credential.Credential
-           org.opensaml.xmlsec.signature.support.SignatureConstants))
+           org.opensaml.xmlsec.keyinfo.impl.X509KeyInfoGeneratorFactory
+           org.opensaml.xmlsec.signature.impl.SignatureBuilder
+           [org.opensaml.xmlsec.signature.support SignatureConstants SignatureValidator Signer]
+           org.w3c.dom.Element))
 
 (def signature-algorithms
   {:dsa   {nil     SignatureConstants/ALGO_ID_SIGNATURE_DSA
@@ -29,16 +37,16 @@
 
 ;; TODO -- I'm pretty sure this mutates `object`
 (defn sign
-  ^org.w3c.dom.Element [object credential & {:keys [signature-algorithm
+  ^Element [object credential & {:keys [signature-algorithm
                                                     canonicalization-algorithm]
                                              :or   {signature-algorithm        [:rsa :sha256]
                                                     canonicalization-algorithm :excl-omit-comments}}]
-  (when-let [object (coerce/->SAMLObject object)]
+  (when-let [^SignableSAMLObject object (coerce/->SAMLObject object)]
     (when-let [^Credential credential (try
                                         (coerce/->Credential credential)
                                         (catch Throwable _
                                           (coerce/->Credential (coerce/->PrivateKey credential))))]
-      (let [signature (doto (.buildObject (org.opensaml.xmlsec.signature.impl.SignatureBuilder.))
+      (let [signature (doto (.buildObject (SignatureBuilder.))
                         (.setSigningCredential credential)
                         (.setSignatureAlgorithm (or (get-in signature-algorithms signature-algorithm)
                                                     (throw (ex-info "No matching signature algorithm"
@@ -46,41 +54,41 @@
                         (.setCanonicalizationAlgorithm (or (get canonicalization-algorithms canonicalization-algorithm)
                                                            (throw (ex-info "No matching canonicalization algorithm"
                                                                            {:algorithm canonicalization-algorithm})))))
-            key-info-gen (doto (new org.opensaml.xmlsec.keyinfo.impl.X509KeyInfoGeneratorFactory)
+            key-info-gen (doto (new X509KeyInfoGeneratorFactory)
                            (.setEmitEntityCertificate true))]
         (when-let [key-info (.generate (.newInstance key-info-gen) credential)] ; No need to test X509 coercion first
           (.setKeyInfo signature key-info))
         (.setSignature object signature)
         (let [element (coerce/->Element object)]
-          (org.opensaml.xmlsec.signature.support.Signer/signObject signature)
+          (Signer/signObject signature)
           element)))))
 
 (defn decrypt! [sp-private-key element]
-  (when-let [sp-private-key (coerce/->PrivateKey sp-private-key)]
+  (when-let [^PrivateKey sp-private-key (coerce/->PrivateKey sp-private-key)]
     (when-let [element (coerce/->Element element)]
-      (com.onelogin.saml2.util.Util/decryptElement element sp-private-key))))
+      (Util/decryptElement element sp-private-key))))
 
 (defn recursive-decrypt! [sp-private-key element]
-  (when-let [sp-private-key (coerce/->PrivateKey sp-private-key)]
-    (when-let [element (coerce/->Element element)]
+  (when-let [^PrivateKey sp-private-key (coerce/->PrivateKey sp-private-key)]
+    (when-let [^Element element (coerce/->Element element)]
       (when (= (.getNodeName element) "saml:EncryptedAssertion")
         (decrypt! sp-private-key element))
       (doseq [i     (range (.. element getChildNodes getLength))
               :let  [child (.. element getChildNodes (item i))]
-              :when (instance? org.w3c.dom.Element child)]
+              :when (instance? Element child)]
         (recursive-decrypt! sp-private-key child)))))
 
 (defn ^:private secure-random-bytes
   (^bytes [size]
    (let [ba (byte-array size)
-         r  (java.security.SecureRandom.)]
+         r  (SecureRandom.)]
      (.nextBytes r ba)
      ba))
   (^bytes []
    (secure-random-bytes 20)))
 
-(defn new-secret-key ^javax.crypto.spec.SecretKeySpec []
-  (javax.crypto.spec.SecretKeySpec. (secure-random-bytes) "HmacSHA1"))
+(defn new-secret-key ^SecretKeySpec []
+  (SecretKeySpec. (secure-random-bytes) "HmacSHA1"))
 
 (defonce ^:private -init
   (do
@@ -101,14 +109,14 @@
     (when-let [credential (coerce/->Credential credential)]
       ;; validate that the signature conforms to the SAML signature spec
       (try
-        (.validate (org.opensaml.saml.security.impl.SAMLSignatureProfileValidator.) signature)
+        (.validate (SAMLSignatureProfileValidator.) signature)
         (catch Throwable e
           (throw (ex-info "Signature does not conform to SAML signature spec"
                           {:object (coerce/->xml-string object)}
                           e))))
       ;; validate that the signature matches the credential
       (try
-        (org.opensaml.xmlsec.signature.support.SignatureValidator/validate signature credential)
+        (SignatureValidator/validate signature credential)
         (catch Throwable e
           (throw (ex-info "Signature does not match credential"
                           {:object (coerce/->xml-string object)}

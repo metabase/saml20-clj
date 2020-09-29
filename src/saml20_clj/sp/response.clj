@@ -7,8 +7,10 @@
              [crypto :as crypto]
              [state :as state]
              [xml :as xml]])
-  (:import [org.opensaml.saml.saml2.core Assertion Attribute AttributeStatement Audience AudienceRestriction Response
-            Subject SubjectConfirmation SubjectConfirmationData]))
+  (:import org.opensaml.core.xml.XMLObject
+           [org.opensaml.saml.saml2.core
+            Assertion Attribute AttributeStatement Audience AudienceRestriction
+            Response StatusCode Subject SubjectConfirmation SubjectConfirmationData]))
 
 (defn clone-response
   "Clone an OpenSAML `response` object."
@@ -222,7 +224,7 @@
     (let [status (.. response getStatus getStatusCode getValue)]
       {:in-response-to (.getInResponseTo response)
        :status         status
-       :success?       (= status org.opensaml.saml.saml2.core.StatusCode/SUCCESS)
+       :success?       (= status StatusCode/SUCCESS)
        :version        (.. response getVersion toString)
        :issue-instant  (t/instant (.getIssueInstant response))
        :destination    (.getDestination response)})))
@@ -264,7 +266,7 @@
           attrs        (into {} (for [^AttributeStatement statement statements
                                       ^Attribute attribute          (.getAttributes statement)]
                                                [(saml2-attr->name (.getName attribute)) ; Or (.getFriendlyName a) ??
-                                                (map #(-> ^org.opensaml.core.xml.XMLObject % .getDOM .getTextContent)
+                                                (map #(-> ^XMLObject % .getDOM .getTextContent)
                                                      (.getAttributeValues attribute))]))
           audiences    (for [^AudienceRestriction restriction (.. assertion getConditions getAudienceRestrictions)
                              ^Audience audience               (.getAudiences restriction)]

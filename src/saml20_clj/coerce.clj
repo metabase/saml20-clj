@@ -6,7 +6,28 @@
              [page :as h.page]]
             [saml20-clj
              [encode-decode :as encode-decode]
-             [xml :as saml.xml]]))
+             [xml :as saml.xml]])
+  (:import [clojure.lang IPersistentMap IPersistentVector]
+           [java.io ByteArrayInputStream StringWriter]
+           [java.security KeyFactory KeyStore PrivateKey PublicKey Security]
+           [java.security.cert CertificateFactory X509Certificate]
+           java.security.interfaces.RSAPrivateCrtKey
+           [java.security.spec PKCS8EncodedKeySpec RSAPublicKeySpec]
+           javax.crypto.spec.SecretKeySpec
+           [javax.xml.transform OutputKeys TransformerFactory]
+           javax.xml.transform.dom.DOMSource
+           javax.xml.transform.stream.StreamResult
+           org.bouncycastle.jce.provider.BouncyCastleProvider
+           org.opensaml.core.config.InitializationService
+           org.opensaml.core.xml.config.XMLObjectProviderRegistrySupport
+           org.opensaml.core.xml.XMLObject
+           org.opensaml.saml.common.SignableSAMLObject
+           org.opensaml.saml.saml2.core.Response
+           [org.opensaml.security.credential BasicCredential Credential]
+           org.opensaml.security.x509.BasicX509Credential
+           org.opensaml.security.x509.impl.KeyStoreX509CredentialAdapter
+           org.opensaml.xmlsec.config.impl.JavaCryptoValidationInitializer
+           [org.w3c.dom Document Element Node]))
 
 ;; these have to be initialized before using.
 ;;
@@ -15,30 +36,30 @@
 (defonce ^:private -init
   (do
     ;; add BouncyCastle as a security provider.
-    (java.security.Security/addProvider (org.bouncycastle.jce.provider.BouncyCastleProvider.))
+    (Security/addProvider (BouncyCastleProvider.))
     ;; initialize OpenSAML
-    (org.opensaml.core.config.InitializationService/initialize)
+    (InitializationService/initialize)
     ;; verify that OpenSAML has the crypto classes it needs
-    (.init (org.opensaml.xmlsec.config.impl.JavaCryptoValidationInitializer.))
+    (.init (JavaCryptoValidationInitializer.))
     nil))
 
 (defprotocol CoerceToPrivateKey
   (->PrivateKey
-    ^java.security.PrivateKey [this]
-    ^java.security.PrivateKey [this ^String algorithm]
+   [this]
+   [this ^String algorithm]
     "Coerce something such as a base-64-encoded string or byte array to a `PrivateKey`. This isn't used directly by
  OpenSAML -- the key must be passed as part of an OpenSAML `Credential`. See `->Credential`."))
 
 (defprotocol CoerceToX509Certificate
-  (->X509Certificate ^java.security.cert.X509Certificate [this]
+  (^java.security.cert.X509Certificate ->X509Certificate [this]
     "Coerce something such as a base-64-encoded string or byte array to a `java.security.cert.X509Certificate`. This
  class isn't used directly by OpenSAML; instead, certificate must be coerced to an OpenSAML `Credential`. See
 `->Credential`."))
 
 (defprotocol CoerceToCredential
   (->Credential
-    ^org.opensaml.security.credential.Credential [this]
-    ^org.opensaml.security.credential.Credential [public-key private-key]
+    [this]
+    [public-key private-key]
     "Coerce something such as a byte array or base-64-encoded String to an OpenSAML `Credential`. Typically, you'd use
   the credential with just the public key for the IdP's credentials, for encrypting requests (in combination with SP
   credentails) or verifying signature(s) in the response. A credential with both public and private keys would
@@ -46,47 +67,47 @@
   for decrypting encrypted assertions in the response."))
 
 (defprotocol CoerceToElement
-  (->Element ^org.w3c.dom.Element [this]))
+  (^org.w3c.dom.Element ->Element [this]))
 
 (defprotocol CoerceToSAMLObject
-  (->SAMLObject ^org.opensaml.saml.common.SignableSAMLObject [this]))
+  (^org.opensaml.saml.common.SignableSAMLObject ->SAMLObject [this]))
 
 (defprotocol CoerceToResponse
-  (->Response ^org.opensaml.saml.saml2.core.Response [this]))
+  (^org.opensaml.saml.saml2.core.Response ->Response [this]))
 
 (defprotocol SerializeXMLString
-  (->xml-string ^String [this]))
+  (^String ->xml-string [this]))
 
 
 ;;; ------------------------------------------------------ Impl ------------------------------------------------------
 
 (defn keystore
-  ^java.security.KeyStore [{:keys [keystore ^String filename ^String password]}]
+  ^KeyStore [{:keys [keystore ^String filename ^String password]}]
   (or keystore
       (when (some-> filename io/as-file .exists)
         (with-open [is (io/input-stream filename)]
-          (doto (java.security.KeyStore/getInstance "JKS")
+          (doto (KeyStore/getInstance "JKS")
             (.load is (.toCharArray password)))))))
 
 (defmulti bytes->PrivateKey
   "Generate a private key from a byte array using the given `algorithm`.
 
     (bytes->PrivateKey my-byte-array :rsa) ;; -> ..."
-  {:arglists '(^java.security.PrivateKey [^bytes key-bytes algorithm])}
+  {:arglists '(^PrivateKey [^bytes key-bytes algorithm])}
   (fn [_ algorithm]
     (keyword algorithm)))
 
 (defmethod bytes->PrivateKey :default
   [^bytes key-bytes algorithm]
-  (.generatePrivate (java.security.KeyFactory/getInstance (str/upper-case (name algorithm)), "BC")
-                    (java.security.spec.PKCS8EncodedKeySpec. key-bytes)))
+  (.generatePrivate (KeyFactory/getInstance (str/upper-case (name algorithm)), "BC")
+                    (PKCS8EncodedKeySpec. key-bytes)))
 
 (defmethod bytes->PrivateKey :aes
   [^bytes key-bytes _]
-  (javax.crypto.spec.SecretKeySpec. key-bytes
-                                    0
-                                    (count key-bytes)
-                                    "AES"))
+  (SecretKeySpec. key-bytes
+                  0
+                  (count key-bytes)
+                  "AES"))
 
 ;; I don't think we can use the "class name" of a byte array in `extend-protocol`
 (extend (Class/forName "[B")
@@ -109,29 +130,29 @@
     ([s] (->PrivateKey s :rsa))
     ([s algorithm] (->PrivateKey (encode-decode/base64-credential->bytes s) algorithm)))
 
-  java.security.PrivateKey
+  PrivateKey
   (->PrivateKey
     ([this] this)
     ([this _] this))
 
-  org.opensaml.security.credential.Credential
+  Credential
   (->PrivateKey
     ([this]
      (.getPrivateKey this))
     ([this _]
      (->PrivateKey this)))
 
-  clojure.lang.IPersistentMap
+  IPersistentMap
   (->PrivateKey
     ([{^String key-alias :alias, ^String password :password, :as m}]
      (when-let [keystore (keystore m)]
        (when-let [key (.getKey keystore key-alias (.toCharArray password))]
-         (assert (instance? java.security.PrivateKey key))
+         (assert (instance? PrivateKey key))
          key)))
     ([this _]
      (->PrivateKey this)))
 
-  clojure.lang.IPersistentVector
+  IPersistentVector
   (->PrivateKey
     ([[_ k]]
      (->PrivateKey k))
@@ -142,9 +163,8 @@
   CoerceToX509Certificate
   {:->X509Certificate
    (fn [^bytes this]
-     (let [cert-factory (java.security.cert.CertificateFactory/getInstance
-                         "X.509")]
-       (with-open [is (java.io.ByteArrayInputStream. this)]
+     (let [cert-factory (CertificateFactory/getInstance "X.509")]
+       (with-open [is (ByteArrayInputStream. this)]
          (.generateCertificate cert-factory is))))})
 
 (extend-protocol CoerceToX509Certificate
@@ -155,14 +175,14 @@
   (->X509Certificate [s]
     (->X509Certificate (encode-decode/base64-credential->bytes s)))
 
-  java.security.cert.X509Certificate
+  X509Certificate
   (->X509Certificate [this] this)
 
-  org.opensaml.security.x509.BasicX509Credential
+  BasicX509Credential
   (->X509Certificate [this]
     (.getEntityCertificate this))
 
-  clojure.lang.IPersistentMap
+  IPersistentMap
   (->X509Certificate
     [{^String key-alias :alias, ^String password :password, :as m}]
     (when (and key-alias password)
@@ -182,53 +202,53 @@
     ([public-key private-key]
      (let [cert (->X509Certificate public-key)]
        (if private-key
-         (org.opensaml.security.x509.BasicX509Credential. cert (->PrivateKey private-key))
-         (org.opensaml.security.x509.BasicX509Credential. cert)))))
+         (BasicX509Credential. cert (->PrivateKey private-key))
+         (BasicX509Credential. cert)))))
 
-  clojure.lang.IPersistentMap
+  IPersistentMap
   (->Credential
     ([{^String key-alias :alias, ^String password :password, :as m}]
      (when (and key-alias password)
        (when-let [keystore (keystore m)]
-         (org.opensaml.security.x509.impl.KeyStoreX509CredentialAdapter. keystore key-alias (.toCharArray password)))))
+         (KeyStoreX509CredentialAdapter. keystore key-alias (.toCharArray password)))))
     ([m private-key]
-     (let [credential (->Credential m)
+     (let [credential ^Credential (->Credential m)
            public-key (.getPublicKey credential)]
        (->Credential public-key private-key))))
 
-  clojure.lang.IPersistentVector
+  IPersistentVector
   (->Credential [[public-key private-key]]
     (->Credential public-key private-key))
 
-  java.security.PublicKey
+  PublicKey
   (->Credential [this]
-    (org.opensaml.security.credential.BasicCredential. this))
+    (BasicCredential. this))
 
-  javax.crypto.spec.SecretKeySpec
+  SecretKeySpec
   (->Credential [this]
-    (org.opensaml.security.credential.BasicCredential. this))
+    (BasicCredential. this))
 
-  java.security.interfaces.RSAPrivateCrtKey
+  RSAPrivateCrtKey
   (->Credential [this]
-    (org.opensaml.security.credential.BasicCredential.
-     (.generatePublic (java.security.KeyFactory/getInstance "RSA")
-                      (java.security.spec.RSAPublicKeySpec. (.getModulus this) (.getPublicExponent this)))
+    (BasicCredential.
+     (.generatePublic (KeyFactory/getInstance "RSA")
+                      (RSAPublicKeySpec. (.getModulus this) (.getPublicExponent this)))
      this)))
 
 (extend-protocol CoerceToElement
   nil
   (->Element [_] nil)
 
-  org.w3c.dom.Element
+  Element
   (->Element [this] this)
 
-  org.w3c.dom.Document
+  Document
   (->Element [this]
     (.getDocumentElement this))
 
-  org.opensaml.core.xml.XMLObject
+  XMLObject
   (->Element [this]
-    (let [marshaller-factory (org.opensaml.core.xml.config.XMLObjectProviderRegistrySupport/getMarshallerFactory)
+    (let [marshaller-factory (XMLObjectProviderRegistrySupport/getMarshallerFactory)
           marshaller         (.getMarshaller marshaller-factory this)]
       (when-not marshaller
         (throw (ex-info (format "Don't know how to marshall %s" (.getCanonicalName (class this)))
@@ -241,7 +261,7 @@
 
   ;; hiccup-style xml element
   ;; TODO -- it's a little inefficient to serialize this to a string and then back to an element
-  clojure.lang.IPersistentVector
+  IPersistentVector
   (->Element [this]
     (->Element (->xml-string this))))
 
@@ -249,19 +269,19 @@
   nil
   (->SAMLObject [_] nil)
 
-  org.opensaml.saml.common.SignableSAMLObject
+  SignableSAMLObject
   (->SAMLObject [this] this)
 
-  org.w3c.dom.Element
+  Element
   (->SAMLObject [this]
-    (let [unmarshaller-factory (org.opensaml.core.xml.config.XMLObjectProviderRegistrySupport/getUnmarshallerFactory)
+    (let [unmarshaller-factory (XMLObjectProviderRegistrySupport/getUnmarshallerFactory)
           unmarshaller         (.getUnmarshaller unmarshaller-factory this)]
       (when-not unmarshaller
         (throw (ex-info (format "Don't know how to unmarshall %s" (.getCanonicalName (class this)))
                         {:object this})))
       (.unmarshall unmarshaller this)))
 
-  org.w3c.dom.Document
+  Document
   (->SAMLObject [this]
     (->SAMLObject (.getDocumentElement this)))
 
@@ -273,10 +293,10 @@
   nil
   (->Response [_] nil)
 
-  org.opensaml.saml.saml2.core.Response
+  Response
   (->Response [this] this)
 
-  org.opensaml.saml.common.SignableSAMLObject
+  SignableSAMLObject
   (->Response [this]
     (throw (ex-info (format "Don't know how to coerce a %s to a Response" (.getCanonicalName (class this)))
                     {:object this})))
@@ -292,25 +312,25 @@
   String
   (->xml-string [this] this)
 
-  clojure.lang.IPersistentVector
+  IPersistentVector
   (->xml-string [this]
     (str
      (h.page/xml-declaration "UTF-8")
      (hiccup/html this)))
 
-  org.w3c.dom.Node
+  Node
   (->xml-string [this]
-    (let [transformer (doto (.. javax.xml.transform.TransformerFactory newInstance newTransformer)
-                        #_(.setOutputProperty javax.xml.transform.OutputKeys/OMIT_XML_DECLARATION "yes")
-                        (.setOutputProperty javax.xml.transform.OutputKeys/ENCODING "UTF-8")
-                        (.setOutputProperty javax.xml.transform.OutputKeys/INDENT "yes")
+    (let [transformer (doto (.. TransformerFactory newInstance newTransformer)
+                        #_(.setOutputProperty OutputKeys/OMIT_XML_DECLARATION "yes")
+                        (.setOutputProperty OutputKeys/ENCODING "UTF-8")
+                        (.setOutputProperty OutputKeys/INDENT "yes")
                         (.setOutputProperty "{http://xml.apache.org/xslt}indent-amount" "2"))
-          dom-source (javax.xml.transform.dom.DOMSource. this)]
-      (with-open [w (java.io.StringWriter.)]
-        (let [stream-result (javax.xml.transform.stream.StreamResult. w)]
+          dom-source (DOMSource. this)]
+      (with-open [w (StringWriter.)]
+        (let [stream-result (StreamResult. w)]
           (.transform transformer dom-source stream-result))
         (.toString w))))
 
-  org.opensaml.core.xml.XMLObject
+  XMLObject
   (->xml-string [this]
     (->xml-string (.getDOM this))))

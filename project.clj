@@ -6,6 +6,8 @@
   :license {:name "Eclipse Public License"
             :url  "https://raw.githubusercontent.com/metabase/saml20-clj/master/LICENSE"}
 
+   :global-vars {*warn-on-reflection* true}
+
   :aliases
   {"test"                      ["with-profile" "+test" "test"]
    "bikeshed"                  ["with-profile" "+bikeshed" "bikeshed" "--max-line-length" "150"]

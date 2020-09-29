@@ -6,7 +6,9 @@
              [coerce :as coerce]
              [crypto :as crypto]
              [encode-decode :as encode-decode]
-             [state :as state]]))
+             [state :as state]])
+  (:import java.util.UUID
+           org.w3c.dom.Element))
 
 (defn- format-instant
   "Converts a date-time to a SAML 2.0 time string."
@@ -15,23 +17,23 @@
 
 (defn request
   "Return XML elements that represent a SAML 2.0 auth request."
-  ^org.w3c.dom.Element [{:keys [ ;; e.g. something like a UUID
-                                request-id
-                                ;; e.g. "Metabase"
-                                sp-name
-                                ;; e.g. ttp://sp.example.com/demo1/index.php?acs
-                                acs-url
-                                ;; e.g. http://sp.example.com/demo1/index.php?acs
-                                idp-url
-                                ;; e.g. http://idp.example.com/SSOService.php
-                                issuer
-                                ;; If present, record the request
-                                state-manager
-                                ;; If present, we can sign the request
-                                credential
-                                instant]
-                         :or   {request-id (str (java.util.UUID/randomUUID))
-                                instant (t/instant)}}]
+  ^Element [{:keys [ ;; e.g. something like a UUID
+                    request-id
+                    ;; e.g. "Metabase"
+                    sp-name
+                    ;; e.g. ttp://sp.example.com/demo1/index.php?acs
+                    acs-url
+                    ;; e.g. http://sp.example.com/demo1/index.php?acs
+                    idp-url
+                    ;; e.g. http://idp.example.com/SSOService.php
+                    issuer
+                    ;; If present, record the request
+                    state-manager
+                    ;; If present, we can sign the request
+                    credential
+                    instant]
+             :or   {request-id (str (UUID/randomUUID))
+                    instant (t/instant)}}]
   (assert acs-url)
   (assert idp-url)
   (assert sp-name)

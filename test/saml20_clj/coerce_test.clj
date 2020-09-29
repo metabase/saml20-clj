@@ -2,17 +2,21 @@
   (:require [clojure.test :refer :all]
             [saml20-clj
              [coerce :as coerce]
-             [test :as test]]))
+             [test :as test]])
+  (:import [java.security Key PrivateKey]
+           java.security.cert.X509Certificate
+           org.apache.commons.codec.digest.DigestUtils
+           org.opensaml.security.x509.X509Credential))
 
-(defn- key-fingerprint [^java.security.Key k]
+(defn- key-fingerprint [^Key k]
   (when k
-    (org.apache.commons.codec.digest.DigestUtils/md5Hex (.getEncoded k))))
+    (DigestUtils/md5Hex (.getEncoded k))))
 
 (deftest ->PrivateKey-test
   (is (= nil (coerce/->PrivateKey nil)))
   (letfn [(is-key-with-fingerprint? [input]
             (let [k (coerce/->PrivateKey input)]
-              (is (instance? java.security.PrivateKey k))
+              (is (instance? PrivateKey k))
               (is (= "af284d1f7bfa789c787f689a95604d31"
                      (key-fingerprint k)))))]
     (testing "Should be able to get a private key from base-64-encoded string"
@@ -108,19 +112,19 @@ c7tL1QjbfAUHAQYwmHkWgPP+T2wAv0pOt36GgMCM
   (testing "from String"
     (testing "make sure we can parse a certificate, no armor"
       (coerce/->X509Certificate test-certificate-str-1)
-      (is (instance? java.security.cert.X509Certificate
+      (is (instance? X509Certificate
                      (coerce/->X509Certificate test-certificate-str-1))))
     (testing "make sure we can parse a certificate with armor 512b key"
-      (is (instance? java.security.cert.X509Certificate
+      (is (instance? X509Certificate
                      (coerce/->X509Certificate test-certificate-str-2))))
     (testing "make sure we can parse a certificate with armor 2048b key"
-      (is (instance? java.security.cert.X509Certificate
+      (is (instance? X509Certificate
                      (coerce/->X509Certificate test-certificate-str-3))))
     (testing "make sure we can parse a certificate with armor 4096b key"
-      (is (instance? java.security.cert.X509Certificate
+      (is (instance? X509Certificate
                      (coerce/->X509Certificate test-certificate-str-4))))))
 
-(defn- x509-credential-fingerprints [^org.opensaml.security.x509.X509Credential credential]
+(defn- x509-credential-fingerprints [^X509Credential credential]
   {:public  (key-fingerprint (.getPublicKey credential))
    :private (key-fingerprint (.getPrivateKey credential))})
 
