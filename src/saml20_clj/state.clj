@@ -8,7 +8,7 @@
   provided so that you can provide your own implementation if you need to do something more sophisticated (such as
   synchronizing across multiple instances)."
   (record-request! [this request-id]
-    "Called whenever a new request to the Dip goes out. The state manager should record `request-id` (and probably the
+    "Called whenever a new request to the IdP goes out. The state manager should record `request-id` (and probably the
     current timestamp as well) so it can be used for validating responses.")
 
   ;; TODO -- consider renaming this to handle-response! or something else clearer

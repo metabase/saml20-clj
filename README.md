@@ -105,11 +105,15 @@ Basic usage for responses from the IdP looks like this (assuming a Ring `request
     saml/assertions)
 ```
 
-`validate` accepts several options that let you configure what validations are done. The default options are:
+`validate` accepts an options map that allows you to configure what validations are done, as well as the 
+stateful parameters (if relevent) those validations are verified against. The list of options and their defaults are
+shown below:
 
 ```clj
-{ ;; e.g. "http://sp.example.com/demo1/index.php?acs" The assertion consumer service URL. If this is not-nil, the
- ;; :recipient validator checks that <SubjectConfirmationData> nodes have a value of Recipient matching this value.
+{ ;; e.g. "http://sp.example.com/demo1/index.php?acs" The assertion consumer service URL. It is *highly* recommended to
+ ;; always pass this value, as the SAML20 spec dictates that any Recipient field within a <SubjectConfirmationData>
+ ;; must be checked against the :acs-url. As this field is IdP-controlled, if you don't pass this value, `validate`
+ ;; will throw exceptions for some providers and not others.
  :acs-url                      nil
 
  ;; The ID of the request we (the SP) sent to the IdP. ID is generated on our end, and should be something like a UUID
@@ -118,10 +122,16 @@ Basic usage for responses from the IdP looks like this (assuming a Ring `request
  ;;
  ;; The state manager implementation that ships with this library does not keep request state; InResponseTo validation
  ;; is provided as an option in case you write your own more sophisticated implementation.
- :request-id                   nil
+ :request-id                   (str (java.util.UUID/randomUUID))
 
- ;; If passed, the state manager will
- :state-manager
+ ;; If passed, must refer to an implementation of the StateManager protocol (either the built-in `in-memory-state-manager`
+ ;; suitable for a single instance or a custom implementation suitable for your deployment). The StateManager, if enabled,
+ ;; should record the `:request-id` and verify it against any returning response. Please refer to `state.clj` for implementation
+ ;; details.
+
+ ;; Note that enforcement of the `:state-manager` requires enabling the `:valid-request-id` response validator (which is
+ ;; enabled by default).
+ :state-manager		       nil
 
  ;; whether this response was solicited (i.e., in response to a request we sent to the IdP). If this is false, the
  ;; :in-response-to validator checks that the request-id is nil.
