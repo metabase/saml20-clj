@@ -110,10 +110,9 @@ stateful parameters (if relevent) those validations are verified against. The li
 shown below:
 
 ```clj
-{ ;; e.g. "http://sp.example.com/demo1/index.php?acs" The assertion consumer service URL. It is *highly* recommended to
+{ ;; e.g. "http://sp.example.com/demo1/index.php?acs" The assertion consumer service URL. It is *required*
  ;; always pass this value, as the SAML20 spec dictates that any Recipient field within a <SubjectConfirmationData>
- ;; must be checked against the :acs-url. As this field is IdP-controlled, if you don't pass this value, `validate`
- ;; will throw exceptions for some providers and not others.
+ ;; must be checked against the :acs-url.
  :acs-url                      nil
 
  ;; The ID of the request we (the SP) sent to the IdP. ID is generated on our end, and should be something like a UUID
