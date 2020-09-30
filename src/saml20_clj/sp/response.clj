@@ -197,7 +197,7 @@
   Because we dispatch on the validator keywords, but only after decrypting the response,
   we use this to preserve the config setting without having to implement a dummy method"
   [options validator-type validator]
-  (if-let [config-setting (some #(= validator %) (get options validator-type))]
+  (if (some #(= validator %) (get options validator-type))
     (-> options
         (update-in [validator-type] (fn [e] (remove #(= % validator) e)))
         (assoc validator true))
