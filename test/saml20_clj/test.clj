@@ -83,6 +83,10 @@
   [_]
   (sample-file "response-with-signed-and-encrypted-assertion.xml"))
 
+(defmethod response {:assertion-signed? true, :assertion-encrypted? true}
+  [_]
+  (sample-file "response-with-signed-and-encrypted-saml2-assertion.xml"))
+
 (defmethod response {:message-signed? true, :assertion-signed? true, :assertion-encrypted? true}
   [_]
   (sample-file "response-with-signed-message-and-signed-and-encryped-assertion.xml"))

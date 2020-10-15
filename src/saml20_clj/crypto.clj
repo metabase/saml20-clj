@@ -63,7 +63,7 @@
 (defn recursive-decrypt! [sp-private-key element]
   (when-let [sp-private-key (coerce/->PrivateKey sp-private-key)]
     (when-let [element (coerce/->Element element)]
-      (when (= (.getNodeName element) "saml:EncryptedAssertion")
+      (when (re-matches #"saml2?:EncryptedAssertion" (.getNodeName element))
         (decrypt! sp-private-key element))
       (doseq [i     (range (.. element getChildNodes getLength))
               :let  [child (.. element getChildNodes (item i))]
