@@ -83,9 +83,13 @@
   [_]
   (sample-file "response-with-signed-and-encrypted-assertion.xml"))
 
-(defmethod response {:assertion-signed? true, :assertion-encrypted? true}
+(defmethod response {:assertion-signed? true, :assertion-encrypted? true :saml2-assertion? true}
   [_]
   (sample-file "response-with-signed-and-encrypted-saml2-assertion.xml"))
+
+(defmethod response {:assertion-signed? true, :assertion-encrypted? true :no-namespace-assertion? true}
+  [_]
+  (sample-file "response-with-signed-and-encrypted-no-namespace-assertion.xml"))
 
 (defmethod response {:message-signed? true, :assertion-signed? true, :assertion-encrypted? true}
   [_]
@@ -98,6 +102,10 @@
   []
   (for [[dispatch-value f] (methods response)]
     (assoc dispatch-value :response (f dispatch-value))))
+
+(defn signed-and-encrypted-assertion? [response-map]
+  (or (= {:assertion-signed? true :assertion-encrypted? true} (dissoc response-map :response))
+      ((some-fn :saml2-assertion? :no-namespace-assertion?) response-map)))
 
 (defn signed? [response-map]
   ((some-fn :message-signed? :assertion-signed?) response-map))
