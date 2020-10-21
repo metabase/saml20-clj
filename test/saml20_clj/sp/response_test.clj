@@ -277,19 +277,18 @@
 
 (deftest Assertion->map-test
   (testing "basic checks on Assertions->map conversions"
-    (doseq
-        [{:keys [response], :as response-map} (test/responses)
-         :when                                (test/valid-confirmation-data? response-map)]
-        (is (= {:audiences    '("sp.example.com")
-                :attrs        {"uid"                  '("test")
-                               "mail"                 '("test@example.com")
-                               "eduPersonAffiliation" '("users" "examplerole1")}
-                :name-id      {:value  "_ce3d2948b4cf20146dee0a0b3dd6f69b6cf86f62d7",
-                               :format "urn:oasis:names:tc:SAML:2.0:nameid-format:transient"},
-                :confirmation {:in-response-to  "ONELOGIN_4fee3b046395c4e751011e97f8900b5273d56685",
-                               :not-before      (t/instant "2019-01-18T06:21:48Z"),
-                               :not-on-or-after (t/instant "2024-01-18T06:21:48Z"),
-                               :address         "192.168.1.1",
-                               :recipient       "http://sp.example.com/demo1/index.php?acs"}}
-               (response/Assertion->map
-                (first (response/opensaml-assertions (coerce/->Response response)))))))))
+    (doseq [{:keys [response], :as response-map} (test/responses)
+            :when                                (test/valid-confirmation-data? response-map)]
+      (is (= {:audiences    '("sp.example.com")
+              :attrs        {"uid"                  '("test")
+                             "mail"                 '("test@example.com")
+                             "eduPersonAffiliation" '("users" "examplerole1")}
+              :name-id      {:value  "_ce3d2948b4cf20146dee0a0b3dd6f69b6cf86f62d7",
+                             :format "urn:oasis:names:tc:SAML:2.0:nameid-format:transient"},
+              :confirmation {:in-response-to  "ONELOGIN_4fee3b046395c4e751011e97f8900b5273d56685",
+                             :not-before      (t/instant "2019-01-18T06:21:48Z"),
+                             :not-on-or-after (t/instant "2024-01-18T06:21:48Z"),
+                             :address         "192.168.1.1",
+                             :recipient       "http://sp.example.com/demo1/index.php?acs"}}
+             (response/Assertion->map
+              (first (response/opensaml-assertions (coerce/->Response response)))))))))
