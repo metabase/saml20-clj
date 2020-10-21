@@ -38,22 +38,25 @@
 
 (deftest decrypt-response-test
   (testing "Should be able to decrypt a response"
-    (let [original              (coerce/->Response (saml20-clj.test/response {:assertion-signed? true, :assertion-encrypted? true}))
-          xml-before-decryption (coerce/->xml-string original)
-          decrypted             (response/decrypt-response original test/sp-private-key)]
-      (testing (str "\noriginal =\n" (coerce/->xml-string original))
-        (testing (str "decrypted =\n" (coerce/->xml-string decrypted))
-          (is (= 0
-                 (count (.getEncryptedAssertions decrypted))))
-          (is (= 1
-                 (count (.getAssertions decrypted))))
-          (testing "\noriginal object should not be modified"
-            (is (= xml-before-decryption
-                   (coerce/->xml-string original)))
-            (is (= 0
-                   (count (.getAssertions original))))
-            (is (= 1
-                   (count (.getEncryptedAssertions original))))))))))
+    (doseq [{:keys [response], :as response-map} (test/responses)
+            :when                                (test/signed-and-encrypted-assertion? response-map)]
+      (let [original              (coerce/->Response response)
+            xml-before-decryption (coerce/->xml-string original)
+            decrypted             (response/decrypt-response original test/sp-private-key)]
+        (testing (test/describe-response-map response-map)
+          (testing (str "\noriginal =\n" (coerce/->xml-string original))
+            (testing (str "decrypted =\n" (coerce/->xml-string decrypted))
+              (is (= 0
+                     (count (.getEncryptedAssertions decrypted))))
+              (is (= 1
+                     (count (.getAssertions decrypted))))
+              (testing "\noriginal object should not be modified"
+                (is (= xml-before-decryption
+                       (coerce/->xml-string original)))
+                (is (= 0
+                       (count (.getAssertions original))))
+                (is (= 1
+                       (count (.getEncryptedAssertions original))))))))))))
 
 (deftest assert-valid-signatures-test
   (testing "unsigned responses should fail\n"
