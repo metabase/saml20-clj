@@ -232,7 +232,7 @@
                                                      :assertion-validators nil
                                                      :issuer               issuer}))]
         (testing "Correct :issuer should succeed"
-          (instance? Response (validate normal-response "idp.example.com")))
+          (is (instance? Response (validate normal-response "idp.example.com"))))
         (testing "If :issuer is not passed, validator should no-op"
           (is (instance? Response (validate normal-response nil))))
         (is (thrown-with-msg?
