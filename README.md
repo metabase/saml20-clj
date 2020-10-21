@@ -105,7 +105,7 @@ Basic usage for responses from the IdP looks like this (assuming a Ring `request
     saml/assertions)
 ```
 
-`validate` accepts an options map that allows you to configure what validations are done, as well as the 
+`validate` accepts an options map that allows you to configure what validations are done, as well as the
 stateful parameters (if relevent) those validations are verified against. The list of options and their defaults are
 shown below:
 
@@ -143,6 +143,10 @@ shown below:
  ;; Address matching this value *iff* Address is present. Address is optional attribute.
  :user-agent-address           nil
 
+ ;; Unique identifier of the IdP. Also referred to as Entity ID or 'Issuer'. If passed, the `:issuer` validators will check
+ ;; that the <Issuer> property for <Response> and <Assertion>s matches.
+ :issuer                      nil
+
  ;; :response-validators and :assertion-validators are validation functions that run and check that the Response is
  ;; valid. If a check fails, these methods will throw an Exception. You can exclude some of these validators or add
  ;; your own by passing different values for these keys. Both types of validators are defined as multimethods; you can
@@ -159,6 +163,9 @@ shown below:
 
   ;; requires that either the <Response> is signed, *every* <Assertion> is signed.
   :require-signature
+
+  ;; If the :issuer option is passed and <Response> has <Issuer> information, checks that these match.
+  :issuer
 
   ;; validates the request ID with :state-manager if it is passed as an option. This does not validate that the value
   ;; matches InResponseTo -- that is done by :in-response-to.
@@ -180,6 +187,9 @@ shown below:
   ;; If :acs-url is non-nil, and <SubjectConfirmationData> is present, checks that <SubjectConfirmationData> has a
   ;; Recipient attribute matching this value.
   :recipient
+
+  ;; If the :issuer option is passed, checks that Assertions have <Issuer> information and that it matches :issuer.
+  :issuer
 
   ;; If <SubjectConfirmationData> is present, has a NotOnOrAfter attribute, and its value is in the future,
   ;; accounting for :allowable-clock-skew-seconds

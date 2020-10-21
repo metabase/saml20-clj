@@ -69,6 +69,22 @@
         (throw (ex-info "<Response> is missing InResponseTo attribute" {})))
       (state/accept-response! state-manager request-id))))
 
+;; for the <Response> element:
+;;
+;; The <Issuer> element MAY be omitted, but if present it MUST contain the unique identifier of the issuing identity
+;; provider
+;;
+;;
+;; If the <Response> has an <Issuer> element *and* the `:issuer` option is passed, make sure the value of <Issuer>
+;; matches `issuer`.
+(defmethod validate-response :issuer
+  [_ _ ^Response decrypted-response {:keys [issuer]}]
+  (when issuer
+    (assert (string? issuer) "Expected :issuer to be a String")
+    (when-let [response-issuer (some-> (.getIssuer decrypted-response) .getValue)]
+      (when-not (= issuer response-issuer)
+        (throw (ex-info "Incorrect Response <Issuer>" {}))))))
+
 ;;
 ;; Subject Confirmation Data Checks
 ;;
@@ -85,7 +101,11 @@
 (defn assertion->subject-confirmation-datas [assertion]
   (map subject-data (-> assertion subject subject-confirmations)))
 
-(defmacro validate-confirmation-datas {:style/indent 1} [[data-binding assertion] & body]
+(defmacro validate-confirmation-datas
+  "Extracts an instance of `SubjectConfirmationData` from `assertion` and binds it to `data-binding`, then executes
+  body."
+  {:style/indent 1}
+  [[data-binding assertion] & body]
   `(doseq [data# (assertion->subject-confirmation-datas ~assertion)]
      (let [~(vary-meta data-binding assoc :tag `SubjectConfirmationData) data#]
        ~@body)))
@@ -182,21 +202,38 @@
                           {:data       (coerce/->xml-string data)
                            :request-id user-agent-address})))))))
 
+;; for Assertions:
+;;
+;; Each assertion's <Issuer> element MUST contain the unique identifier of the issuing identity provider
+;;
+;; If the `:issuer` option is passed, make sure that the <Assertion> has an <Issuer> and that is value matches
+;; `issuer`.
+(defmethod validate-assertion :issuer
+  [_ ^Assertion assertion {:keys [issuer]}]
+  (when issuer
+    (assert (string? issuer) "Expected :issuer to be a String")
+    (let [assertion-issuer (or (some-> (.getIssuer assertion) .getValue)
+                               (throw (ex-info "Assertion is missing required <Issuer> element" {})))]
+      (when-not (= issuer assertion-issuer)
+        (throw (ex-info "Incorrect Assertion <Issuer>" {}))))))
+
 (def default-validation-options
   {:response-validators  [:signature
                           :require-signature
-                          :valid-request-id]
+                          :valid-request-id
+                          :issuer]
    :assertion-validators [:signature
                           :recipient
                           :not-on-or-after
                           :not-before
                           :in-response-to
-                          :address]})
+                          :address
+                          :issuer]})
 
 (defn- move-validator-config
-  "Raises one of the validation settings from a nested map up into the main config.
-  Because we dispatch on the validator keywords, but only after decrypting the response,
-  we use this to preserve the config setting without having to implement a dummy method"
+  "Raises one of the validation settings from a nested map up into the main config. Because we dispatch on the validator
+  keywords, but only after decrypting the response, we use this to preserve the config setting without having to
+  implement a dummy method"
   [options validator-type validator]
   (if (some #(= validator %) (get options validator-type))
     (-> options
@@ -205,14 +242,53 @@
     options))
 
 (defn validate
-  "Validate response. Returns decrypted response if valid."
+  "Validate response. Returns decrypted response if valid. Options:
+
+  * `:response-validators` - optional. The validators to run against the `<Response>` itself. Validators are
+     implemented as methods of `validate-response`. If this is not passed, uses validators defined in
+     `default-validation-options`.
+
+  * `:assertion-validators` - optional. the validators to run against each `<Assertion>` in the response. Validators are
+    implemented as methods of `validate-assertion`. If this is not passed, uses validators defined in
+    `default-validation-options`.
+
+  * `:acs-url` - REQUIRED. Assertion consumer service URL. The `:recipient` assertion validates this.
+
+  * `:request-id` - optional. Validated by the `:in-response-to` validator if passed.
+
+  * `:state-manager` - optional. An instance of `StateManager` (such as `in-memory-state-manager`) that can check
+    whether a Response with the given ID was already processed.
+
+  * `:user-agent-address` - optional. Address of the client. If present, the `:address` validator will check that any
+    `Address` information in the `<SubjectConfimrationData>` passes.
+
+  * `:issuer` - optional. Unique identifier for the IdP. If passed, the `:issuer` validators will validate any
+    `Issuer` information present on the `<Response>`, and the `Issuer` of each `<Assertion>` (`Issuer` is required for
+    Assertions).
+
+  * `:solicited?` - optional. Whether this request is the result of an SSO login flow initiated by the SP (us). If
+    this is `false`, the :in-response-to` validator checks that the `request-id` in `nil`.
+
+  * `:allowable-clock-skew-seconds` - optional. By default, 3 minutes. The amount of leeway to use when validating
+    `NotOnOrAfter` and `NotBefore` attributes."
+  {:arglists '([response idp-cert sp-private-key]
+               [response idp-cert sp-private-key {:keys [response-validators
+                                                         assertion-validators
+                                                         acs-url
+                                                         request-id
+                                                         state-manager
+                                                         user-agent-address
+                                                         issuer
+                                                         solicited?
+                                                         allowable-clock-skew-seconds]}])}
   ([response idp-cert sp-private-key]
    (validate response idp-cert sp-private-key nil))
 
   ([response idp-cert sp-private-key options]
-   (let [{:keys [response-validators assertion-validators], :as options} (-> (merge default-validation-options options)
-                                                                             (assoc :idp-cert (coerce/->Credential idp-cert))
-                                                                             (move-validator-config :assertion-validators :require-encryption))]
+   (let [options                                            (-> (merge default-validation-options options)
+                                                                (assoc :idp-cert (coerce/->Credential idp-cert))
+                                                                (move-validator-config :assertion-validators :require-encryption))
+         {:keys [response-validators assertion-validators]} options]
      (when (:require-encryption options)
        (ensure-encrypted-assertions response))
      (when-let [response (coerce/->Response response)]

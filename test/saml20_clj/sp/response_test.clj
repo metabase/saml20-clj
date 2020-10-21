@@ -38,7 +38,8 @@
 
 (deftest decrypt-response-test
   (testing "Should be able to decrypt a response"
-    (let [original              (coerce/->Response (saml20-clj.test/response {:assertion-signed? true, :assertion-encrypted? true}))
+    (let [original              (coerce/->Response (saml20-clj.test/response {:assertion-signed? true
+                                                                              :assertion-encrypted? true}))
           xml-before-decryption (coerce/->xml-string original)
           decrypted             (response/decrypt-response original test/sp-private-key)]
       (testing (str "\noriginal =\n" (coerce/->xml-string original))
@@ -125,118 +126,170 @@
 ;; TODO there's no test for an SubjectConfirmationData field is missing (which is valid), but it seems like a small
 ;; case to create a whole new document for
 
-(defn- validate [validator options]
+(defn- validate-assertions [validator options]
   (let [response (test/response {:valid-confirmation-data? true})]
     (response/validate response nil nil (merge {:response-validators  nil
                                                 :assertion-validators [validator]}
                                                options))
     :valid))
 
-(defn- validate-bad-data [validator options]
+(defn- validate-assertions-bad-data [validator options]
   (let [response (test/response {:invalid-confirmation-data? true})]
     (response/validate response nil nil (merge {:response-validators  nil
                                                 :assertion-validators [validator]}
                                                options))
     :valid))
 
-(deftest validate-not-on-or-after-test
+(deftest validate-assertions-not-on-or-after-test
   (t/with-clock (t/mock-clock (t/instant "2020-09-24T00:00:00.000Z"))
     (is (= :valid
-           (validate :not-on-or-after nil))))
+           (validate-assertions :not-on-or-after nil))))
   (t/with-clock (t/mock-clock (t/instant "2025-01-01T00:00:00.000Z"))
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
          #"NotOnOrAfter has passed"
-         (validate :not-on-or-after nil)))
+         (validate-assertions :not-on-or-after nil)))
     (testing "should respect clock skew"
       ;; one year of clock skew :(
       (is (= :valid
-             (validate :not-on-or-after {:allowable-clock-skew-seconds (* 60 60 24 365)}))))
+             (validate-assertions :not-on-or-after {:allowable-clock-skew-seconds (* 60 60 24 365)}))))
     (testing "should notice if NotOnOrAfter is missing"
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
            #"does not contain NotOnOrAfter"
-           (validate-bad-data :not-on-or-after nil))))))
+           (validate-assertions-bad-data :not-on-or-after nil))))))
 
-(deftest validate-not-before-test
+(deftest validate-assertions-not-before-test
   (t/with-clock (t/mock-clock (t/instant "2020-09-24T00:00:00.000Z"))
     (is (= :valid
-           (validate :not-before nil))))
+           (validate-assertions :not-before nil))))
     (testing "should respect clock skew"
       (is (= :valid
-             (validate :not-before {:allowable-clock-skew-seconds (* 60 60 24 365)}))))
+             (validate-assertions :not-before {:allowable-clock-skew-seconds (* 60 60 24 365)}))))
   (t/with-clock (t/mock-clock (t/instant "2010-09-24T00:00:00.000Z"))
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
          #"NotBefore is in the future"
-         (validate :not-before nil)))))
+         (validate-assertions :not-before nil)))))
 
-(deftest validate-recipient-test
+(deftest validate-assertions-recipient-test
   (is (= :valid
-         (validate :recipient {:acs-url "http://sp.example.com/demo1/index.php?acs"})))
+         (validate-assertions :recipient {:acs-url "http://sp.example.com/demo1/index.php?acs"})))
   (testing "wrong ACS URL"
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
          #"Recipient does not match assertion consumer service URL"
-         (validate :recipient {:acs-url "http://this.is.the.wrong.url"}))))
+         (validate-assertions :recipient {:acs-url "http://this.is.the.wrong.url"}))))
   (testing "missing recipient"
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
          #"does not contain a Recipient"
-         (validate-bad-data :recipient {:acs-url "foobar"}))))
+         (validate-assertions-bad-data :recipient {:acs-url "foobar"}))))
   (testing "contains a recipient, but not checking against URL as required by spec"
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
          #"contains a Recipient but an acs-url was not passed to validate against"
-         (validate :recipient nil)))))
+         (validate-assertions :recipient nil)))))
 
-(deftest validate-in-response-to-test
+(deftest validate-assertions-in-response-to-test
   (testing "\nchecking in-response-to attribute (solicited)"
     (is (= :valid
-           (validate :in-response-to {:request-id auth-req-id, :solicited? true})))
+           (validate-assertions :in-response-to {:request-id auth-req-id, :solicited? true})))
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
          #"<SubjectConfirmationData> InResponseTo does not match request-id"
-         (validate :in-response-to {:request-id "bad-request-id", :solicited? true})))
+         (validate-assertions :in-response-to {:request-id "bad-request-id", :solicited? true})))
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
          #"<SubjectConfirmationData> does not contain InResponseTo"
-         (validate-bad-data :in-response-to {:request-id auth-req-id, :solicited? true}))))
+         (validate-assertions-bad-data :in-response-to {:request-id auth-req-id, :solicited? true}))))
   (testing "\nchecking in-response-to attribute (unsolicited)"
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
          #"<SubjectConfirmationData> InResponseTo should not be present for an unsolicited request"
-         (validate :in-response-to {:request-id "bad-request-id", :solicited? false})))
+         (validate-assertions :in-response-to {:request-id "bad-request-id", :solicited? false})))
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
          #"<SubjectConfirmationData> InResponseTo should not be present for an unsolicited request"
-         (validate :in-response-to {:solicited? false})))))
+         (validate-assertions :in-response-to {:solicited? false})))))
 
-(deftest validate-address-test
+(deftest validate-assertions-address-test
   (testing "correct user agent address"
     (is (= :valid
-           (validate :address {:user-agent-address "192.168.1.1"}))))
+           (validate-assertions :address {:user-agent-address "192.168.1.1"}))))
   (testing "bad user agent address"
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
          #"Address does not match user-agent-address"
-         (validate :address {:user-agent-address "im.a.bad.man"})))))
+         (validate-assertions :address {:user-agent-address "im.a.bad.man"})))))
+
+(deftest validate-assertions-response-issuer-test
+  (let [normal-response    (test/response {})
+        response-no-issuer (test/response {:no-issuer-information? true})]
+    (testing "If response has <Issuer>, it should be validated against `:issuer` (if provided)"
+      (letfn [(validate [response issuer]
+                (response/validate response nil nil {:response-validators  [:issuer]
+                                                     :assertion-validators nil
+                                                     :issuer               issuer}))]
+        (testing "Correct :issuer should succeed"
+          (instance? Response (validate normal-response "idp.example.com")))
+        (testing "If :issuer is not passed, validator should no-op"
+          (is (instance? Response (validate normal-response nil))))
+        (is (thrown-with-msg?
+             AssertionError
+             #"Expected :issuer to be a String"
+             (validate normal-response 123)))
+        (testing "Wrong :issuer should fail"
+          (is (thrown-with-msg?
+               clojure.lang.ExceptionInfo
+               #"Incorrect Response <Issuer>"
+               (validate normal-response "wrong.idp.issuer.com"))))
+        (testing "<Response> should be allowed to have no <Issuer>"
+          (is (instance? Response (validate response-no-issuer "idp.example.com"))))))
+
+    (testing "Assertion <Issuer> should be validated against `:issuer` (if provided)"
+      (letfn [(validate [response issuer]
+                (response/validate response nil nil {:response-validators  []
+                                                     :assertion-validators [:issuer]
+                                                     :issuer               issuer}))]
+        (testing "Correct :issuer should succeed"
+          (is (instance? Response (validate normal-response "idp.example.com"))))
+        (testing "If :issuer is not passed, validator should no-op"
+          (is (instance? Response (validate normal-response nil))))
+        (is (thrown-with-msg?
+             AssertionError
+             #"Expected :issuer to be a String"
+             (validate normal-response 123)))
+        (testing "Wrong :issuer should fail"
+          (is (thrown-with-msg?
+               clojure.lang.ExceptionInfo
+               #"Incorrect Assertion <Issuer>"
+               (validate normal-response "wrong.idp.issuer.com"))))
+        (testing "Validation should fail if Assertion does not have an <Issuer> but :issuer is passed"
+          (is (thrown-with-msg?
+               clojure.lang.ExceptionInfo
+               #"Assertion is missing required <Issuer> element"
+               (validate response-no-issuer "idp.example.com"))))))
+
+    (testing "Responses with no <Issuer> information should be allowed for now if :issuer is not passed"
+      (is (instance? Response (response/validate response-no-issuer nil nil {:response-validators  [:issuer]
+                                                                             :assertion-validators [:issuer]}))))))
 
 (deftest Assertion->map-test
   (testing "basic checks on Assertions->map conversions"
     (doseq
         [{:keys [response], :as response-map} (test/responses)
          :when                                (test/valid-confirmation-data? response-map)]
-      (is (= {:audiences    '("sp.example.com")
-              :attrs        {"uid"                  '("test")
-                             "mail"                 '("test@example.com")
-                             "eduPersonAffiliation" '("users" "examplerole1")}
-              :name-id      {:value  "_ce3d2948b4cf20146dee0a0b3dd6f69b6cf86f62d7",
-                             :format "urn:oasis:names:tc:SAML:2.0:nameid-format:transient"},
-              :confirmation {:in-response-to  "ONELOGIN_4fee3b046395c4e751011e97f8900b5273d56685",
-                             :not-before      (t/instant "2019-01-18T06:21:48Z"),
-                             :not-on-or-after (t/instant "2024-01-18T06:21:48Z"),
-                             :address         "192.168.1.1",
-                             :recipient       "http://sp.example.com/demo1/index.php?acs"}}
-             (response/Assertion->map
-                 (first (response/opensaml-assertions (coerce/->Response response)))))))))
+        (is (= {:audiences    '("sp.example.com")
+                :attrs        {"uid"                  '("test")
+                               "mail"                 '("test@example.com")
+                               "eduPersonAffiliation" '("users" "examplerole1")}
+                :name-id      {:value  "_ce3d2948b4cf20146dee0a0b3dd6f69b6cf86f62d7",
+                               :format "urn:oasis:names:tc:SAML:2.0:nameid-format:transient"},
+                :confirmation {:in-response-to  "ONELOGIN_4fee3b046395c4e751011e97f8900b5273d56685",
+                               :not-before      (t/instant "2019-01-18T06:21:48Z"),
+                               :not-on-or-after (t/instant "2024-01-18T06:21:48Z"),
+                               :address         "192.168.1.1",
+                               :recipient       "http://sp.example.com/demo1/index.php?acs"}}
+               (response/Assertion->map
+                (first (response/opensaml-assertions (coerce/->Response response)))))))))

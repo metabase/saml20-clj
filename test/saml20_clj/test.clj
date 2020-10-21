@@ -87,6 +87,10 @@
   [_]
   (sample-file "response-with-signed-message-and-signed-and-encryped-assertion.xml"))
 
+(defmethod response {:no-issuer-information? true}
+  [_]
+  (sample-file "response-no-issuer.xml"))
+
 (defn responses
   "All the sample responses above but in a convenient format for writing test code that loops over them.
 
