@@ -71,6 +71,10 @@
   [_]
   (sample-file "response-with-signed-message-and-assertion.xml"))
 
+(defmethod response {:message-encrypted? true :assertion-signed? true}
+  [_]
+  (sample-file "response-with-encrypted-message-and-signed-assertion.xml"))
+
 (defmethod response {:assertion-encrypted? true}
   [_]
   (sample-file "response-with-encrypted-assertion.xml"))
@@ -98,6 +102,9 @@
   []
   (for [[dispatch-value f] (methods response)]
     (assoc dispatch-value :response (f dispatch-value))))
+
+(defn encrypted? [response-map]
+  ((some-fn :message-encrypted?) response-map))
 
 (defn signed? [response-map]
   ((some-fn :message-signed? :assertion-signed?) response-map))
