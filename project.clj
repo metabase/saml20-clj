@@ -23,7 +23,7 @@
   :dependencies
   [[org.clojure/spec.alpha "0.2.187"]
    [org.clojure/tools.logging "1.1.0"]
-   [com.onelogin/java-saml "2.5.0" :exclusions [commons-codec/commons-codec]]
+   [com.onelogin/java-saml "2.8.0"]
    [clojure.java-time "0.3.2"]
    [commons-io/commons-io "2.8.0"]
    [hiccup "1.0.5"]
