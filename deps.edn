@@ -2,11 +2,11 @@
  {"opensaml" {:url "https://build.shibboleth.net/nexus/content/repositories/releases/"}}
 
  :deps
- {org.clojure/spec.alpha              {:mvn/version "0.2.187"}
-  org.clojure/tools.logging           {:mvn/version "1.1.0"}
-  com.onelogin/java-saml              {:mvn/version "2.8.0"}
-  clojure.java-time/clojure.java-time {:mvn/version "0.3.2"}
-  commons-io/commons-io               {:mvn/version "2.8.0"}
+ {org.clojure/spec.alpha              {:mvn/version "0.3.218"}
+  org.clojure/tools.logging           {:mvn/version "1.2.4"}
+  com.onelogin/java-saml              {:mvn/version "2.9.0"}
+  clojure.java-time/clojure.java-time {:mvn/version "0.3.3"}
+  commons-io/commons-io               {:mvn/version "2.11.0"}
   hiccup/hiccup                       {:mvn/version "1.0.5"}
   org.opensaml/opensaml-core          {:mvn/version "3.4.6"} ; 4.x doesn't support Java 8
   org.opensaml/opensaml-saml-api      {:mvn/version "3.4.6"}
@@ -14,8 +14,8 @@
   org.opensaml/opensaml-xmlsec-api    {:mvn/version "3.4.6"}
   org.opensaml/opensaml-xmlsec-impl   {:mvn/version "3.4.6"}
   potemkin/potemkin                   {:mvn/version "0.4.5"}
-  pretty/pretty                       {:mvn/version "1.0.4"}
-  ring/ring-codec                     {:mvn/version "1.1.2"}}
+  pretty/pretty                       {:mvn/version "1.0.5"}
+  ring/ring-codec                     {:mvn/version "1.2.0"}}
 
  :aliases
  {
