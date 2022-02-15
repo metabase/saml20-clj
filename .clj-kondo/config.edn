@@ -3,7 +3,7 @@
   :reduce-without-init          {:level :warning}
   :redundant-fn-wrapper         {:level :warning}
   :refer                        {:level :warning}
-  :shadowed-var                 {:level :warning}
+  #_:shadowed-var                 #_{:level :warning}
   :single-key-in                {:level :warning}
   :unsorted-required-namespaces {:level :warning}
   :used-underscored-binding     {:level :warning}}

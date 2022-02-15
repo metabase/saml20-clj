@@ -237,7 +237,7 @@
   [options validator-type validator]
   (if (some #(= validator %) (get options validator-type))
     (-> options
-        (update-in [validator-type] (fn [e] (remove #(= % validator) e)))
+        (update validator-type (fn [e] (remove #(= % validator) e)))
         (assoc validator true))
     options))
 

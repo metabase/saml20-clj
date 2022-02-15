@@ -1,6 +1,6 @@
 (ns saml20-clj.state
   (:require [java-time :as t]
-            [pretty.core :refer [PrettyPrintable]]))
+            [pretty.core :as pretty]))
 
 (defprotocol StateManager
   "Protocol for managing state for recording which requests are in flight, so we can determine whether responses
@@ -89,7 +89,7 @@
   ([request-timeout-seconds initial-state]
    (let [state (atom initial-state)]
      (reify
-       PrettyPrintable
+       pretty/PrettyPrintable
        (pretty [_]
          (list `in-memory-state-manager request-timeout-seconds @state))
 
