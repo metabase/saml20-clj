@@ -23,3 +23,6 @@ jobs:
           clojure -X:jar :version "\"$(cat VERSION.txt)\""
       - name: Upload JAR to Clojars
         run: clojure -X:deploy :artifact '"target/saml20-clj.jar"'
+        env:
+          CLOJARS_USERNAME: ${{ secrets.CLOJARS_USERNAME }}
+          CLOJARS_PASSWORD: ${{ secrets.CLOJARS_PASSWORD }}
