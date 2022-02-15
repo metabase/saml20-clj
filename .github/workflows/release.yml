@@ -1,0 +1,31 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  Build-Jar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: "jar"
+      - name: Build JAR
+        shell: bash
+        run: >-
+          clojure -X:jar $(cat VERSION.txt)
+
+  Deploy-To-Clojars:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: "deploy"
+      - name: Build JAR
+        run: clojure -X:deploy :artifact target/whitespace-linter.jar
