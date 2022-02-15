@@ -7,21 +7,7 @@ on:
       - add-deploy-workflow
 
 jobs:
-  Build-Jar:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v2
-      - uses: ./.github/actions/setup
-        with:
-          cache-key: "jar"
-      - name: Build JAR
-        shell: bash
-        run: >-
-          set -x;
-          clojure -X:jar :version "\"$(cat VERSION.txt)\""
-
-  Deploy-To-Clojars:
+  Deploy:
     runs-on: ubuntu-latest
     environment: Deployment
     timeout-minutes: 10
@@ -31,4 +17,9 @@ jobs:
         with:
           cache-key: "deploy"
       - name: Build JAR
+        shell: bash
+        run: >-
+          set -x;
+          clojure -X:jar :version "\"$(cat VERSION.txt)\""
+      - name: Upload JAR to Clojars
         run: clojure -X:deploy :artifact '"target/saml20-clj.jar"'
