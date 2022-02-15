@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - master
-      - add-deploy-workflow
 
 jobs:
   Build-Jar:
@@ -23,6 +22,7 @@ jobs:
 
   Deploy-To-Clojars:
     runs-on: ubuntu-latest
+    environment: Deployment
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v2
@@ -30,4 +30,4 @@ jobs:
         with:
           cache-key: "deploy"
       - name: Build JAR
-        run: clojure -X:deploy :artifact target/whitespace-linter.jar
+        run: clojure -X:deploy :artifact '"target/saml20-clj.jar"'
