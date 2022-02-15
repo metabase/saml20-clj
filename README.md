@@ -1,7 +1,6 @@
 # saml20-clj
 
 [![Downloads](https://versions.deps.co/metabase/saml20-clj/downloads.svg)](https://versions.deps.co/metabase/saml20-clj)
-[![Dependencies Status](https://versions.deps.co/metabase/saml20-clj/status.svg)](https://versions.deps.co/metabase/saml20-clj)
 ![Linters](https://github.com/metabase/saml20-clj/actions/workflows/linters.yml/badge.svg)
 ![Tests](https://github.com/metabase/saml20-clj/actions/workflows/tests.yml/badge.svg)
 [![codecov](https://codecov.io/gh/metabase/saml20-clj/branch/master/graph/badge.svg)](https://codecov.io/gh/metabase/saml20-clj)
