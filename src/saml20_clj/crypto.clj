@@ -83,9 +83,11 @@
   (javax.crypto.spec.SecretKeySpec. (secure-random-bytes) "HmacSHA1"))
 
 (defonce ^:private -init
-  (do
+  (delay
     (Init/init)
     nil))
+
+@-init
 
 (defn signed? [object]
   (when-let [object (coerce/->SAMLObject object)]

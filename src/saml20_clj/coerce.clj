@@ -11,7 +11,7 @@
 ;; TODO -- consider putting these in their own respective delays and deref inside relevant functions so init is done
 ;; when they are called rather than when namespace is evaluated.
 (defonce ^:private -init
-  (do
+  (delay
     ;; add BouncyCastle as a security provider.
     (java.security.Security/addProvider (org.bouncycastle.jce.provider.BouncyCastleProvider.))
     ;; initialize OpenSAML
@@ -19,6 +19,8 @@
     ;; verify that OpenSAML has the crypto classes it needs
     (.init (org.opensaml.xmlsec.config.impl.JavaCryptoValidationInitializer.))
     nil))
+
+@-init
 
 (defprotocol CoerceToPrivateKey
   (->PrivateKey

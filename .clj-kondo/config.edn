@@ -1,0 +1,12 @@
+{:linters
+ {#_:missing-docstring            #_{:level :warn} ; log a warning, but don't fail.
+  :reduce-without-init          {:level :warning}
+  :redundant-fn-wrapper         {:level :warning}
+  :refer                        {:level :warning}
+  :shadowed-var                 {:level :warning}
+  :single-key-in                {:level :warning}
+  :unsorted-required-namespaces {:level :warning}
+  :used-underscored-binding     {:level :warning}}
+
+ :config-in-comment {:linters {:unresolved-symbol {:level :off}}}
+ :lint-as           {saml20-clj.sp.response/validate-confirmation-datas clojure.core/let}}

@@ -1,0 +1,97 @@
+{:mvn/repos
+ {"opensaml" {:url "https://build.shibboleth.net/nexus/content/repositories/releases/"}}
+
+ :deps
+ {org.clojure/spec.alpha              {:mvn/version "0.2.187"}
+  org.clojure/tools.logging           {:mvn/version "1.1.0"}
+  com.onelogin/java-saml              {:mvn/version "2.8.0"}
+  clojure.java-time/clojure.java-time {:mvn/version "0.3.2"}
+  commons-io/commons-io               {:mvn/version "2.8.0"}
+  hiccup/hiccup                       {:mvn/version "1.0.5"}
+  org.opensaml/opensaml-core          {:mvn/version "4.1.1"}
+  org.opensaml/opensaml-saml-api      {:mvn/version "4.1.1"}
+  org.opensaml/opensaml-saml-impl     {:mvn/version "4.1.1"}
+  org.opensaml/opensaml-xmlsec-api    {:mvn/version "4.1.1"}
+  org.opensaml/opensaml-xmlsec-impl   {:mvn/version "4.1.1"}
+  potemkin/potemkin                   {:mvn/version "0.4.5"}
+  pretty/pretty                       {:mvn/version "1.0.4"}
+  ring/ring-codec                     {:mvn/version "1.1.2"}}
+
+ :aliases
+ {
+  :dev
+  {:extra-deps  {pjstadig/humane-test-output {:mvn/version "0.11.0"}}
+   :extra-paths ["test"]}
+
+  ;; clojure -X:dev:test
+  :test
+  {:extra-deps {io.github.cognitect-labs/test-runner {:git/tag "v0.5.0" :git/sha "b3fd0d2"}}
+   :exec-fn    saml20-clj.runners.test/test}
+
+  ;; clojure -M:check
+  :check
+  {:extra-deps {athos/clj-check {:git/url "https://github.com/athos/clj-check.git"
+                                 :sha     "518d5a1cbfcd7c952f548e6dbfcb9a4a5faf9062"}}
+   :main-opts  ["-m" "clj-check.check"]}
+
+  ;; clojure -X:dev:eastwood
+  :eastwood
+  {:extra-deps      {jonase/eastwood {:mvn/version "1.2.2"}}
+   :exec-fn         saml20-cli.runners.eastwood/eastwood
+   :add-linters     [:unused-fn-args
+                     :unused-locals]
+   :exclude-linters [:deprecations
+                     :unused-ret-vals
+                     :implicit-dependencies]}
+
+  ;; clojure -X:dev:namespace-checker
+  :namespace-checker
+  {:extra-deps {lein-check-namespace-decls/lein-check-namespace-decls {:mvn/version "1.0.4"}} ; misnomer since this works on Clojure CLI now too
+   :exec-fn    check-namespace-decls.core/check-namespace-decls
+   :exec-args  {:prefix-rewriting false
+                :source-paths     ["src" "test"]}}
+
+  ;; clojure -X:dev:cloverage
+  :cloverage
+  {:extra-deps {cloverage/cloverage {:mvn/version "1.2.2"}}
+   :exec-fn    cloverage.coverage/run-project
+   :exec-args  {:fail-threshold 66
+                :codecov?       true
+                ;; don't instrument logging forms, since they won't get executed as part of tests anyway
+                ;; log calls expand to these
+                :exclude-call   [clojure.tools.logging/logf clojure.tools.logging/logp]}}
+
+  ;; clojure -M:kondo
+  :kondo
+  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2022.02.09"}}
+   :main-opts    ["-m" "clj-kondo.main"
+                  "--lint" "src"]}
+
+  ;; clojure -T:whitespace-linter
+  :whitespace-linter
+  {:deps       {com.github.camsaul/whitespace-linter {:sha "912644a2b9cc91edcce31a6fa997c46479341a1d"}}
+   :ns-default whitespace-linter
+   :exec-args  {:paths            ["./.dir-locals.el"
+                                   "./deps.edn"
+                                   "src"
+                                   "test"]
+                :include-patterns ["\\.clj.?$"
+                                   "\\.edn$"
+                                   "\\.el$"
+                                   "\\.xml$"]}}
+
+  ;; clojure -X:jar :version "<version>"
+  :jar
+  {:replace-deps {com.github.seancorfield/depstar {:mvn/version "2.1.303"}}
+   :exec-fn      hf.depstar/jar
+   :exec-args    {:group-id    "metabase"
+                  :artifact-id "saml20-clj"
+                  :jar         "target/saml20-clj.jar"
+                  :sync-pom    true
+                  :paths-only  true}}
+
+  ;; clojure -X:deploy :artifact '"target/saml20-clj.jar"'
+  :deploy
+  {:extra-deps {slipset/deps-deploy {:mvn/version "RELEASE"}}
+   :exec-fn    deps-deploy.deps-deploy/deploy
+   :exec-args  {:installer :remote}}}}

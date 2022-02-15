@@ -5,15 +5,20 @@ version: 2.1
 ########################################################################################################################
 
 executors:
-  default:
+  java-17:
     working_directory: /home/circleci/metabase/saml20-clj/
     docker:
-      - image: circleci/clojure:lein-2.9.1
+      - image: circleci/clojure:openjdk-17-tools-deps-1.10.3.822-buster
 
   java-11:
     working_directory: /home/circleci/metabase/saml20-clj/
     docker:
-      - image: circleci/clojure:openjdk-11-lein-2.9.1
+      - image: circleci/clojure:openjdk-11-tools-deps-1.10.3.822-buster
+
+  java-8:
+    working_directory: /home/circleci/metabase/saml20-clj/
+    docker:
+      - image: circleci/clojure:openjdk-8-tools-deps-1.10.3.822-buster
 
 
 ########################################################################################################################
@@ -31,13 +36,13 @@ commands:
     steps:
       - restore_cache:
           keys:
-            - deps-{{ checksum "project.clj" }}
+            - deps-{{ checksum "deps.edn" }}
             - deps-
 
 jobs:
 
   checkout:
-    executor: default
+    executor: java-17
     steps:
       - restore_cache:
           keys:
@@ -55,43 +60,55 @@ jobs:
             - metabase/saml20-clj
 
   deps:
-    executor: default
+    executor: java-17
     steps:
       - attach-workspace
       - restore-deps-cache
-      - run: lein deps
+      - run: clojure -P -X:dev:check:eastwood:test:namespace-checker:cloverage
+      - run: clojure -P -X:jar
+      - run: clojure -P -X:deploy
+      - run: clojure -P -T:whitespace-linter
+      - run: clojure -P -M:kondo
       - save_cache:
-          key: deps-{{ checksum "project.clj" }}
+          key: deps-{{ checksum "deps.edn" }}
           paths:
             - /home/circleci/.m2
+            - /home/circleci/.gitlibs
 
-  lein:
+  clojure:
     parameters:
       e:
         type: executor
-        default: default
-      lein-command:
+        java-17: java-17
+      clojure-command:
         type: string
       after-steps:
         type: steps
-        default: []
+        java-17: []
     executor: << parameters.e >>
     steps:
       - attach-workspace
       - restore-deps-cache
       - run:
-          command: lein << parameters.lein-command >>
+          command: clojure << parameters.clojure-command >>
           no_output_timeout: 5m
       - steps: << parameters.after-steps >>
 
   reflection-warnings:
-    executor: default
+    executor: java-17
     steps:
       - attach-workspace
       - restore-deps-cache
       - run:
           command: ./check-for-reflection-warnings.sh
           no_output_timeout: 3m
+
+  deploy:
+    executor: java-17
+    steps:
+      - attach-workspace
+      - restore-deps-cache
+      - run: .circleci/release.sh
 
 
 ########################################################################################################################
@@ -108,62 +125,82 @@ workflows:
           requires:
             - checkout
 
-      - lein:
-          name: tests
+      - clojure:
+          name: tests-java-17
           requires:
             - deps
-          lein-command: test
+          clojure-command: -X:dev:test
 
-      - lein:
+      - clojure:
           name: tests-java-11
           requires:
             - deps
           e: java-11
-          lein-command: test
+          clojure-command: -X:dev:test
 
-      - lein:
+      - clojure:
+          name: tests-java-8
+          requires:
+            - deps
+          e: java-8
+          clojure-command: -X:dev:test
+
+      - clojure:
           name: eastwood
           requires:
             - deps
-          lein-command: eastwood
+          clojure-command: -X:dev:eastwood
 
-      - lein:
+      - clojure:
           name: namespace-decls
           requires:
             - deps
-          lein-command: check-namespace-decls
+          clojure-command: -X:dev:namespace-checker
 
-      - lein:
-          name: bikeshed
+      - clojure:
+          name: check
           requires:
             - deps
-          lein-command: bikeshed
+          clojure-command: -M:check
 
-      - lein:
+      - clojure:
           name: cloverage
           requires:
             - deps
-          lein-command: cloverage --codecov
+          clojure-command: -X:dev:cloverage
           after-steps:
             - run:
                 name: Upload code coverage to codecov.io
                 command: bash <(curl -s https://codecov.io/bash)
 
+      - clojure:
+          name: whitespace-linter
+          requires:
+            - deps
+          clojure-command: -T:whitespace-linter
+
+      - clojure:
+          name: kondo
+          requires:
+            - deps
+          clojure-command: -M:kondo
+
       - reflection-warnings:
           requires:
             - deps
 
-      - lein:
-          name: deploy
+      - deploy:
           requires:
-            - bikeshed
+            - check
             - eastwood
             - namespace-decls
-            - tests
+            - tests-java-8
             - tests-java-11
+            - tests-java-17
             - cloverage
             - reflection-warnings
-          lein-command: deploy clojars
+            - whitespace-linter
+            - kondo
           filters:
             branches:
               only: master
