@@ -1,0 +1,49 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  Test-Java-8:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: ./.github/actions/setup
+        with:
+          java-version: 8
+          cache-key: "test"
+      - run: clojure -X:dev:test
+
+  Test-Java-11:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: ./.github/actions/setup
+        with:
+          java-version: 11
+          cache-key: "test"
+      - run: clojure -X:dev:test
+
+  Test-Java-17:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: ./.github/actions/setup
+        with:
+          java-version: 17
+          cache-key: "test"
+      - run: clojure -X:dev:test
+
+  Cloverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: ./.github/actions/setup
+        with:
+          java-version: 8
+          cache-key: "cloverage"
+      - run: clojure -X:dev:cloverage
+      - name: Upload code coverage to codecov.io
+        run: >-
+          bash <(curl -s https://codecov.io/bash)

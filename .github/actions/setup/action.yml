@@ -1,0 +1,34 @@
+name: Setup
+inputs:
+  java-version:
+    required: true
+    default: 17
+  cache-key:
+    required: true
+    default: "deps"
+
+runs:
+  using: composite
+  steps:
+    - name: Check out code
+      uses: actions/checkout@v2
+    - name: Prepare JDK
+      uses: actions/setup-java@v2
+      with:
+        java-version: ${{ inputs.java-version }}
+        distribution: temurin
+    - name: Install Clojure CLI
+      shell: bash
+      run: >-
+        curl -O https://download.clojure.org/install/linux-install-1.10.3.1075.sh &&
+        sudo bash ./linux-install-1.10.3.1075.sh
+    - name: Get M2 Cache
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.m2
+          ~/.gitlibs
+        key: v1-${{ hashFiles('deps.edn') }}-${{ inputs.cache-key }}
+        restore-keys: |
+          v1-${{ hashFiles('deps.edn') }}-
+          v1-

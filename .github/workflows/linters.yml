@@ -1,0 +1,60 @@
+name: Linters
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  Check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: "check"
+      - run: clojure -M:check
+
+  Eastwood:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: "eastwood"
+      - run: clojure -X:dev:eastwood
+
+  Namespace-Declarations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: "namespace-declarations"
+      - run: clojure -X:dev:namespace-checker
+
+  Reflection-Warnings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: "reflection-warnings"
+      - run: ./check-for-reflection-warnings.sh
+
+  Whitespace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: "whitespace"
+      - run: clojure -T:whitespace-linter
+
+  Kondo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: "kondo"
+      - run: clojure -M:kondo
