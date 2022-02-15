@@ -79,12 +79,12 @@ jobs:
     parameters:
       e:
         type: executor
-        java-17: java-17
+        default: java-17
       clojure-command:
         type: string
       after-steps:
         type: steps
-        java-17: []
+        default: []
     executor: << parameters.e >>
     steps:
       - attach-workspace
