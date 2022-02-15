@@ -8,11 +8,11 @@
   clojure.java-time/clojure.java-time {:mvn/version "0.3.2"}
   commons-io/commons-io               {:mvn/version "2.8.0"}
   hiccup/hiccup                       {:mvn/version "1.0.5"}
-  org.opensaml/opensaml-core          {:mvn/version "4.1.1"}
-  org.opensaml/opensaml-saml-api      {:mvn/version "4.1.1"}
-  org.opensaml/opensaml-saml-impl     {:mvn/version "4.1.1"}
-  org.opensaml/opensaml-xmlsec-api    {:mvn/version "4.1.1"}
-  org.opensaml/opensaml-xmlsec-impl   {:mvn/version "4.1.1"}
+  org.opensaml/opensaml-core          {:mvn/version "3.4.6"}
+  org.opensaml/opensaml-saml-api      {:mvn/version "3.4.6"}
+  org.opensaml/opensaml-saml-impl     {:mvn/version "3.4.6"}
+  org.opensaml/opensaml-xmlsec-api    {:mvn/version "3.4.6"}
+  org.opensaml/opensaml-xmlsec-impl   {:mvn/version "3.4.6"}
   potemkin/potemkin                   {:mvn/version "0.4.5"}
   pretty/pretty                       {:mvn/version "1.0.4"}
   ring/ring-codec                     {:mvn/version "1.1.2"}}
