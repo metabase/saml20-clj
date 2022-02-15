@@ -18,7 +18,7 @@ jobs:
       - name: Build JAR
         shell: bash
         run: >-
-          clojure -X:jar $(cat VERSION.txt)
+          clojure -X:jar "\"$(cat VERSION.txt)\""
 
   Deploy-To-Clojars:
     runs-on: ubuntu-latest
