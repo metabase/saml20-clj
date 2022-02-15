@@ -53,7 +53,7 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           cache-key: "whitespace"
-      - run: clojure -T:whitespace-linter
+      - run: clojure -T:whitespace-linter lint
 
   Kondo:
     runs-on: ubuntu-latest

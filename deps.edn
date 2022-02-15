@@ -36,13 +36,14 @@
 
   ;; clojure -X:dev:eastwood
   :eastwood
-  {:extra-deps      {jonase/eastwood {:mvn/version "1.2.2"}}
-   :exec-fn         saml20-cli.runners.eastwood/eastwood
-   :add-linters     [:unused-fn-args
-                     :unused-locals]
-   :exclude-linters [:deprecations
-                     :unused-ret-vals
-                     :implicit-dependencies]}
+  {:extra-deps {jonase/eastwood {:mvn/version "1.2.2"}}
+   :exec-fn    eastwood.lint/eastwood-from-cmdline
+   :exec-args  {:source-paths    ["src"]
+                :add-linters     [:unused-fn-args
+                                  :unused-locals]
+                :exclude-linters [:deprecations
+                                  :unused-ret-vals
+                                  :implicit-dependencies]}}
 
   ;; clojure -X:dev:namespace-checker
   :namespace-checker
@@ -67,7 +68,7 @@
    :main-opts    ["-m" "clj-kondo.main"
                   "--lint" "src"]}
 
-  ;; clojure -T:whitespace-linter
+  ;; clojure -T:whitespace-linter lint
   :whitespace-linter
   {:deps       {com.github.camsaul/whitespace-linter {:sha "912644a2b9cc91edcce31a6fa997c46479341a1d"}}
    :ns-default whitespace-linter
