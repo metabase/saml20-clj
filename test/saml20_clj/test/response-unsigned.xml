@@ -33,6 +33,13 @@
         <saml:AttributeValue xsi:type="xs:string">users</saml:AttributeValue>
         <saml:AttributeValue xsi:type="xs:string">examplerole1</saml:AttributeValue>
       </saml:Attribute>
+      <saml:Attribute Name="member_of" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:basic">
+        <saml:AttributeValue xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">test-group1</saml:AttributeValue>
+      </saml:Attribute>
+      <saml:Attribute Name="member_of" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:basic">
+        <saml:AttributeValue xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">test-group2</saml:AttributeValue>
+        <saml:AttributeValue xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">test-group3</saml:AttributeValue>
+      </saml:Attribute>
     </saml:AttributeStatement>
   </saml:Assertion>
 </samlp:Response>

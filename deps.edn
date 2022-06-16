@@ -2,7 +2,8 @@
  {"opensaml" {:url "https://build.shibboleth.net/nexus/content/repositories/releases/"}}
 
  :deps
- {org.clojure/spec.alpha              {:mvn/version "0.3.218"}
+ {org.clojure/clojure                 {:mvn/version "1.11.1"}
+  org.clojure/spec.alpha              {:mvn/version "0.3.218"}
   org.clojure/tools.logging           {:mvn/version "1.2.4"}
   com.onelogin/java-saml              {:mvn/version "2.9.0"}
   clojure.java-time/clojure.java-time {:mvn/version "0.3.3"}
