@@ -40,15 +40,15 @@ service. This is done in the following manner:
 
 (def config {:app-name "My Fancy App"
              :acs-url "https://my-app.com/saml/login"
-             :slo-url "https://my-app.com/saml/logout"}
+             :slo-url "https://my-app.com/saml/logout"})
 
 (def credentials {:alias "my-saml-secrets"
                   :filename "path/to/keystorefile.jks"
-                  :password "s1krit"}
+                  :password "s1krit"})
 
 (def metadata (-> {:sp-cert (saml-coerce/->X509Certificate credentials)}
                   (merge config)
-                  saml-core/metadata)
+                  saml-core/metadata))
 ```
 
 ### Recording Requests
