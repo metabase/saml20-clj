@@ -81,3 +81,14 @@
              clojure.lang.ExceptionInfo
              #"matching canonicalization algorithm"
              (crypto/sign signed test/sp-private-key :canonicalization-algorithm [:bad]))))))
+
+(deftest has-private-key-test
+  (testing "has private key"
+    (is (= true (crypto/has-private-key? {:filename test/keystore-filename
+                                          :password test/keystore-password
+                                          :alias    "sp"})))
+
+    (testing "has only public key"
+      (is (= false (crypto/has-private-key? {:filename test/keystore-filename
+                                             :password test/keystore-password
+                                             :alias    "idp"}))))))
