@@ -88,6 +88,8 @@
                                           :password test/keystore-password
                                           :alias    "sp"})))
 
+    (is (= true (crypto/has-private-key? test/sp-private-key)))
+
     (testing "has only public key"
       (is (= false (crypto/has-private-key? {:filename test/keystore-filename
                                              :password test/keystore-password

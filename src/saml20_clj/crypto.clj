@@ -27,11 +27,13 @@
    :excl-omit-comments SignatureConstants/ALGO_ID_C14N_EXCL_OMIT_COMMENTS
    :excl-with-comments SignatureConstants/ALGO_ID_C14N_EXCL_WITH_COMMENTS})
 
-(defn has-private-key? [credential]
+(defn has-private-key?
+  "Will check if the provided keystore contains a private key or not."
+  [credential]
   (when-let [^Credential credential (try
-                                        (coerce/->Credential credential)
-                                        (catch Throwable _
-                                          (coerce/->Credential (coerce/->PrivateKey credential))))]
+                                      (coerce/->Credential credential)
+                                      (catch Throwable _
+                                        (coerce/->Credential (coerce/->PrivateKey credential))))]
     (some? (.getPrivateKey credential))))
 
 ;; TODO -- I'm pretty sure this mutates `object`
