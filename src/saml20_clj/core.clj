@@ -3,6 +3,7 @@
   namespaces, but vars are made available here via Potemkin."
   (:require [potemkin :as p]
             [saml20-clj.coerce :as coerce]
+            [saml20-clj.crypto :as crypto]
             [saml20-clj.encode-decode :as encode]
             [saml20-clj.sp.metadata :as metadata]
             [saml20-clj.sp.request :as request]
@@ -12,6 +13,7 @@
 ;; this is so the linter doesn't complain about unused namespaces.
 (comment
   coerce/keep-me
+  crypto/keep-me
   encode/keep-me
   metadata/keep-me
   request/keep-me
@@ -23,6 +25,9 @@
   ->X509Certificate
   ->Response
   ->xml-string]
+
+ [crypto
+  has-private-key?]
 
  [encode
   str->base64
