@@ -1,10 +1,8 @@
 (ns saml20-clj.xml
-  (:require
-   [saml20-clj.encode-decode :as encode-decode])
-  (:import
-   (javax.xml XMLConstants)
-   (javax.xml.parsers DocumentBuilder DocumentBuilderFactory)
-   (org.w3c.dom Document)))
+  (:require [saml20-clj.encode-decode :as encode-decode])
+  (:import [javax.xml.parsers DocumentBuilder DocumentBuilderFactory]
+           javax.xml.XMLConstants
+           org.w3c.dom.Document))
 
 (defn document-builder
   ^DocumentBuilder []
