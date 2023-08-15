@@ -1,7 +1,9 @@
 (ns saml20-clj.xml
   (:require [saml20-clj.encode-decode :as encode-decode])
-  (:import [javax.xml.parsers DocumentBuilder DocumentBuilderFactory]
-           org.w3c.dom.Document))
+  (:import
+   [javax.xml XMLConstants]
+   [javax.xml.parsers DocumentBuilder DocumentBuilderFactory]
+   org.w3c.dom.Document))
 
 (defn document-builder
   ^DocumentBuilder []
@@ -10,6 +12,9 @@
      (.setNamespaceAware true)
      (.setFeature "http://xml.org/sax/features/external-parameter-entities" false)
      (.setFeature "http://apache.org/xml/features/nonvalidating/load-external-dtd" false)
+     (.setFeature "http://apache.org/xml/features/disallow-doctype-decl" true)
+     (.setFeature XMLConstants/FEATURE_SECURE_PROCESSING true)
+     (.setXIncludeAware false)
      (.setExpandEntityReferences false))))
 
 (defn clone-document [^org.w3c.dom.Document document]
