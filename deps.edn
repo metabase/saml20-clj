@@ -8,7 +8,7 @@
   clojure.java-time/clojure.java-time {:mvn/version "1.1.0"}
   commons-io/commons-io               {:mvn/version "2.11.0"}
   hiccup/hiccup                       {:mvn/version "1.0.5"}
-  org.apache.santuario/xmlsec         {:mvn/version "3.0.1"} ; use latest version and override transient dep from OpenSAML
+  org.apache.santuario/xmlsec         {:mvn/version "3.0.3"} ; use latest version and override transient dep from OpenSAML
   org.cryptacular/cryptacular         {:mvn/version "1.2.5"} ; use latest version and override transient dep from OpenSAML
   org.opensaml/opensaml-core          {:mvn/version "4.2.0"}
   org.opensaml/opensaml-saml-api      {:mvn/version "4.2.0"}
