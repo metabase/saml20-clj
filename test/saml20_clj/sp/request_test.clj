@@ -191,3 +191,34 @@
                    java.lang.AssertionError
                    (re-pattern (format "%s is required" (name k)))
                    (request/request request))))))))))
+
+(deftest logout-request-test
+  (let [logout-xml (t/with-clock (t/mock-clock (t/instant "2020-09-24T22:51:00.000Z"))
+                     (request/make-logout-request-xml
+                       {:request-id "ONELOGIN_109707f0030a5d00620c9d9df97f627afe9dcc24"
+                        :user-email "user@example.com"
+                        :idp-url    "http://idp.example.com/SSOService.php"
+                        :issuer     "http://sp.example.com/demo1/metadata.php"}))]
+    (is (= [:samlp:LogoutRequest
+            {:xmlns:samlp "urn:oasis:names:tc:SAML:2.0:protocol"
+             :xmlns:saml "urn:oasis:names:tc:SAML:2.0:assertion"
+             :Version "2.0"
+             :ID "ONELOGIN_109707f0030a5d00620c9d9df97f627afe9dcc24"
+             :IssueInstant "2020-09-24T22:51:00Z"
+             :Destination "http://idp.example.com/SSOService.php"}
+            [:saml:Issuer "http://sp.example.com/demo1/metadata.php"]
+            [:saml:NameID {:Format "urn:oasis:names:tc:SAML:2.0:nameid-format:emailAddress"} "user@example.com"]
+            [:samlp:SessionIndex "SessionIndex_From_Authentication_Assertion"]]
+          logout-xml))
+    (is (= (str "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" "\n"
+                "<samlp:LogoutRequest Destination=\"http://idp.example.com/SSOService.php\" "
+                "ID=\"ONELOGIN_109707f0030a5d00620c9d9df97f627afe9dcc24\" "
+                "IssueInstant=\"2020-09-24T22:51:00Z\" "
+                "Version=\"2.0\" "
+                "xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\" "
+                "xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\">"
+                "<saml:Issuer>http://sp.example.com/demo1/metadata.php</saml:Issuer>"
+                "<saml:NameID Format=\"urn:oasis:names:tc:SAML:2.0:nameid-format:emailAddress\">user@example.com</saml:NameID>"
+                "<samlp:SessionIndex>SessionIndex_From_Authentication_Assertion</samlp:SessionIndex>"
+                "</samlp:LogoutRequest>")
+           (coerce/->xml-string logout-xml)))))

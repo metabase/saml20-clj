@@ -1,7 +1,7 @@
 (ns saml20-clj.sp.response
   "Code for parsing the XML response (as a String)from the IdP to an OpenSAML `Response`, and for basic operations like
   validating the signature and reading assertions."
-  (:require [java-time :as t]
+  (:require [java-time.api :as t]
             [saml20-clj.coerce :as coerce]
             [saml20-clj.crypto :as crypto]
             [saml20-clj.state :as state]
@@ -313,7 +313,7 @@
 
   Check the javadoc of OpenSAML at:
 
-  https://build.shibboleth.net/nexus/service/local/repositories/releases/archive/org/opensaml/opensaml/2.5.3/opensaml-2.5.3-javadoc.jar/!/index.html"
+  https://web.archive.org/web/20150421234900/https://build.shibboleth.net/nexus/service/local/repositories/releases/archive/org/opensaml/opensaml/2.5.3/opensaml-2.5.3-javadoc.jar/!/index.html"
   [response]
   (when-let [response (coerce/->Response response)]
     (let [status (.. response getStatus getStatusCode getValue)]

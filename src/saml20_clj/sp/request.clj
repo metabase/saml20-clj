@@ -1,6 +1,6 @@
 (ns saml20-clj.sp.request
   (:require [clojure.string :as str]
-            [java-time :as t]
+            [java-time.api :as t]
             [ring.util.codec :as codec]
             [saml20-clj.coerce :as coerce]
             [saml20-clj.crypto :as crypto]
@@ -15,6 +15,23 @@
 (defn- non-blank-string? [s]
   (and (string? s)
        (not (str/blank? s))))
+
+(defn- make-auth-xml [request-id instant sp-name idp-url acs-url issuer]
+  [:samlp:AuthnRequest
+   {:xmlns:samlp                 "urn:oasis:names:tc:SAML:2.0:protocol"
+    :ID                          request-id
+    :Version                     "2.0"
+    :IssueInstant                (format-instant instant)
+    :ProtocolBinding             "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
+    :ProviderName                sp-name
+    :IsPassive                   false
+    :Destination                 idp-url
+    :AssertionConsumerServiceURL acs-url}
+   [:saml:Issuer
+    {:xmlns:saml "urn:oasis:names:tc:SAML:2.0:assertion"}
+    issuer]
+   ;;[:samlp:NameIDPolicy {:AllowCreate false :Format saml-format}]
+   ])
 
 (defn request
   "Return XML elements that represent a SAML 2.0 auth request."
@@ -39,22 +56,9 @@
   (assert (non-blank-string? idp-url) "idp-url is required")
   (assert (non-blank-string? sp-name) "sp-name is required")
   (assert (non-blank-string? issuer) "issuer is required")
-  (let [request (coerce/->Element (coerce/->xml-string
-                                   [:samlp:AuthnRequest
-                                    {:xmlns:samlp                 "urn:oasis:names:tc:SAML:2.0:protocol"
-                                     :ID                          request-id
-                                     :Version                     "2.0"
-                                     :IssueInstant                (format-instant instant)
-                                     :ProtocolBinding             "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
-                                     :ProviderName                sp-name
-                                     :IsPassive                   false
-                                     :Destination                 idp-url
-                                     :AssertionConsumerServiceURL acs-url}
-                                    [:saml:Issuer
-                                     {:xmlns:saml "urn:oasis:names:tc:SAML:2.0:assertion"}
-                                     issuer]
-                                    ;;[:samlp:NameIDPolicy {:AllowCreate false :Format saml-format}]
-                                    ]))]
+  (let [request (coerce/->Element
+                  (coerce/->xml-string
+                    (make-auth-xml request-id instant sp-name idp-url acs-url issuer)))]
     (when state-manager
       (state/record-request! state-manager (.getAttribute request "ID")))
     (if-not credential
@@ -62,24 +66,71 @@
       (or (crypto/sign request credential)
           (throw (ex-info "Failed to sign request" {:request request}))))))
 
-(defn uri-query-str
-  ^String [clean-hash]
-  (codec/form-encode clean-hash))
+(defn- add-query-params
+  "Add query parameters to a URL.
+
+  (add-query-params \"http://example.com\" {:a \"b\" :c \"d\"}
+  ;; => \"http://example.com?a=b&c=d\""
+  [url params]
+  (str url (if (str/includes? url "?") "&" "?") (codec/form-encode params)))
 
 (defn idp-redirect-response
   "Return Ring response for HTTP 302 redirect."
   [saml-request idp-url relay-state]
-  {:pre [(some? saml-request) (string? idp-url) (string? relay-state)]}
-  (let [saml-request-str (if (string? saml-request)
-                           saml-request
-                           (coerce/->xml-string saml-request))
-        url              (str idp-url
-                              (if (str/includes? idp-url "?")
-                                "&"
-                                "?")
-                              (let [saml-request-str (encode-decode/str->deflate->base64 saml-request-str)]
-                                (uri-query-str
-                                 {:SAMLRequest saml-request-str, :RelayState relay-state})))]
+  {:pre [(some? saml-request)
+         (string? idp-url)
+         (string? relay-state)]}
+  (let [saml-request-str (cond-> saml-request
+                           (not (string? saml-request)) coerce/->xml-string)
+        saml-request-str (encode-decode/str->deflate->base64 saml-request-str)
+        url              (add-query-params idp-url {:SAMLRequest saml-request-str
+                                                    :RelayState relay-state})]
+    {:status  302 ; found
+     :headers {"Location" url}
+     :body    ""}))
+
+;; Wanted to call this make-request-xml, but it gets exported in core.clj, which
+;; warrants the request prefix
+(defn make-logout-request-xml [& {:keys [request-id instant idp-url issuer user-email]
+                                  :or {request-id (str "id" (random-uuid))
+                                       instant (format-instant (t/instant))}}]
+  (assert (non-blank-string? idp-url) "idp-url is required")
+  (assert (non-blank-string? issuer) "issuer is required")
+  (assert (non-blank-string? user-email) "user-email is required")
+  [:samlp:LogoutRequest {:xmlns:samlp "urn:oasis:names:tc:SAML:2.0:protocol"
+                         :xmlns:saml "urn:oasis:names:tc:SAML:2.0:assertion"
+                         :Version "2.0"
+                         :ID request-id
+                         :IssueInstant instant
+                         :Destination idp-url}
+   [:saml:Issuer issuer]
+   [:saml:NameID {:Format "urn:oasis:names:tc:SAML:2.0:nameid-format:emailAddress"} user-email]
+   [:samlp:SessionIndex "SessionIndex_From_Authentication_Assertion"]])
+
+(defn logout-redirect-location
+  "This returns a url that you'd want to redirect a client to. Either using
+  `ring/redirect` with a 302 status code or passing it to a client in a post body
+  to have them redirect to."
+  [& {:keys [issuer user-email idp-url relay-state]}]
+  (assert (non-blank-string? idp-url) "idp-url is required")
+  (assert (non-blank-string? user-email) "user-email is required")
+  (assert (non-blank-string? issuer) "issuer is required")
+  (assert (non-blank-string? relay-state) "relay-state is required")
+  (add-query-params idp-url {:SAMLRequest (encode-decode/str->deflate->base64
+                                            (coerce/->xml-string (make-logout-request-xml
+                                                                   :idp-url idp-url
+                                                                   :issuer issuer
+                                                                   :user-email user-email)))
+                             :RelayState relay-state}))
+
+(defn idp-logout-redirect-response
+  "Return Ring response for HTTP 302 redirect."
+  [idp-url saml-request relay-state issuer]
+  (let [url (logout-redirect-location
+              :issuer issuer
+              :idp-url idp-url
+              :saml-request saml-request
+              :relay-state relay-state)]
     {:status  302 ; found
      :headers {"Location" url}
      :body    ""}))

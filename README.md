@@ -11,7 +11,7 @@
 [![Clojars Project](https://clojars.org/metabase/saml20-clj/latest-version.svg)](http://clojars.org/metabase/saml20-clj)
 
 
-This is a SAML 2.0 Clojure library for SSO acting as a fairly thin wrapper around the Java libraries [OpenSAML
+This is a SAML 2.0 Clojure library for SSO acting as a thin wrapper around the Java libraries [OpenSAML
 v4](https://wiki.shibboleth.net/confluence/display/OS30/Home) and some utility functions from [OneLogin's SAML
 library](https://github.com/onelogin/java-saml) This library allows a Clojure application to act as a Service Provider
 (SP).

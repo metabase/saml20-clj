@@ -1,6 +1,6 @@
 (ns saml20-clj.sp.response-test
   (:require [clojure.test :refer :all]
-            [java-time :as t]
+            [java-time.api :as t]
             [saml20-clj.coerce :as coerce]
             [saml20-clj.sp.response :as response]
             [saml20-clj.test :as test])

@@ -38,7 +38,10 @@
 
  [request
   idp-redirect-response
-  request]
+  request
+  logout-redirect-location
+  idp-logout-redirect-response
+  make-logout-request-xml]
 
  [response
   decrypt-response
