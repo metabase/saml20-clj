@@ -93,11 +93,12 @@
      :headers {"Location" url}
      :body    ""}))
 
-;; Wanted to call this make-request-xml, but it gets exported in core.clj, which
+;; I wanted to call this make-request-xml, but it gets exported in core.clj, which
 ;; warrants the request prefix
-(defn make-logout-request-xml [& {:keys [request-id instant idp-url issuer user-email]
-                                  :or {
-                                       instant (format-instant (t/instant))}}]
+(defn make-logout-request-xml
+  "Generates a SAML 2.0 logout request, as a hiccupey datastructure."
+  [& {:keys [request-id instant idp-url issuer user-email]
+      :or {instant (format-instant (t/instant))}}]
   (assert (non-blank-string? idp-url) "idp-url is required")
   (assert (non-blank-string? issuer) "issuer is required")
   (assert (non-blank-string? user-email) "user-email is required")
