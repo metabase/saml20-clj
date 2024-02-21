@@ -260,3 +260,18 @@
              (encode-decode/base64->inflate->str SAMLRequest))
           "SAMLRequest is generated correctly")
       (is (= issuer (encode-decode/base64->str RelayState))))))
+
+(deftest idp-logout-redirect-response-test
+  (t/with-clock (t/mock-clock (t/instant "2020-09-24T22:51:00.000Z"))
+    (let [req-id "ONELOGIN_109707f0030a5d00620c9d9df97f627afe9dcc24"
+          idp-url "http://idp.example.com/SSOService.php"
+          user-email "user@example.com"
+          issuer "http://sp.example.com/demo1/metadata.php"
+          logout-url (request/logout-redirect-location
+                       {:issuer     issuer
+                        :user-email user-email
+                        :idp-url    idp-url
+                        :request-id req-id
+                        :relay-state (encode-decode/str->base64 issuer)})
+          redirect (request/idp-logout-redirect-response issuer user-email idp-url (encode-decode/str->base64 issuer) req-id)]
+      (is (= logout-url (get-in redirect [:headers "Location"]))))))

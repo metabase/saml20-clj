@@ -130,12 +130,15 @@
 
 (defn idp-logout-redirect-response
   "Return Ring response for HTTP 302 redirect."
-  [idp-url saml-request relay-state issuer]
-  (let [url (logout-redirect-location
-              :issuer issuer
-              :idp-url idp-url
-              :saml-request saml-request
-              :relay-state relay-state)]
-    {:status  302 ; found
-     :headers {"Location" url}
-     :body    ""}))
+  ([issuer user-email idp-url relay-state]
+   (idp-logout-redirect-response issuer user-email idp-url relay-state (random-request-id)))
+  ([issuer user-email idp-url relay-state request-id]
+   (let [url (logout-redirect-location
+               :idp-url idp-url
+               :user-email user-email
+               :issuer issuer
+               :relay-state relay-state
+               :request-id request-id)]
+     {:status  302 ; found
+      :headers {"Location" url}
+      :body    ""})))
