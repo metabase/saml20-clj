@@ -6,7 +6,7 @@
             [saml20-clj.encode-decode :as encode-decode]
             [saml20-clj.sp.request :as request]
             [saml20-clj.test :as test])
-  (:import [java.net URI]))
+  (:import java.net.URI))
 
 (def target-uri "http://sp.example.com/demo1/index.php?acs")
 
