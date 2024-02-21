@@ -1,7 +1,7 @@
 (ns saml20-clj.sp.request-test
   (:require [clojure.string :as str]
             [clojure.test :refer :all]
-            [java-time :as t]
+            [java-time.api :as t]
             [saml20-clj.coerce :as coerce]
             [saml20-clj.sp.request :as request]
             [saml20-clj.test :as test]))

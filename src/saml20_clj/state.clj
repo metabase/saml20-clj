@@ -1,5 +1,5 @@
 (ns saml20-clj.state
-  (:require [java-time :as t]
+  (:require [java-time.api :as t]
             [pretty.core :as pretty]))
 
 (defprotocol StateManager
