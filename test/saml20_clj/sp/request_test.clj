@@ -3,8 +3,11 @@
             [clojure.test :refer :all]
             [java-time.api :as t]
             [saml20-clj.coerce :as coerce]
+            [saml20-clj.encode-decode :as encode-decode]
             [saml20-clj.sp.request :as request]
-            [saml20-clj.test :as test]))
+            [saml20-clj.test :as test]
+            [saml20-clj.encode-decode :as encode])
+  (:import [java.net URI URLDecoder]))
 
 (def target-uri "http://sp.example.com/demo1/index.php?acs")
 
@@ -195,10 +198,10 @@
 (deftest logout-request-test
   (let [logout-xml (t/with-clock (t/mock-clock (t/instant "2020-09-24T22:51:00.000Z"))
                      (request/make-logout-request-xml
-                       {:request-id "ONELOGIN_109707f0030a5d00620c9d9df97f627afe9dcc24"
-                        :user-email "user@example.com"
-                        :idp-url    "http://idp.example.com/SSOService.php"
-                        :issuer     "http://sp.example.com/demo1/metadata.php"}))]
+                      {:request-id "ONELOGIN_109707f0030a5d00620c9d9df97f627afe9dcc24"
+                       :user-email "user@example.com"
+                       :idp-url    "http://idp.example.com/SSOService.php"
+                       :issuer     "http://sp.example.com/demo1/metadata.php"}))]
     (is (= [:samlp:LogoutRequest
             {:xmlns:samlp "urn:oasis:names:tc:SAML:2.0:protocol"
              :xmlns:saml "urn:oasis:names:tc:SAML:2.0:assertion"
@@ -209,7 +212,7 @@
             [:saml:Issuer "http://sp.example.com/demo1/metadata.php"]
             [:saml:NameID {:Format "urn:oasis:names:tc:SAML:2.0:nameid-format:emailAddress"} "user@example.com"]
             [:samlp:SessionIndex "SessionIndex_From_Authentication_Assertion"]]
-          logout-xml))
+           logout-xml))
     (is (= (str "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" "\n"
                 "<samlp:LogoutRequest Destination=\"http://idp.example.com/SSOService.php\" "
                 "ID=\"ONELOGIN_109707f0030a5d00620c9d9df97f627afe9dcc24\" "
@@ -222,3 +225,39 @@
                 "<samlp:SessionIndex>SessionIndex_From_Authentication_Assertion</samlp:SessionIndex>"
                 "</samlp:LogoutRequest>")
            (coerce/->xml-string logout-xml)))))
+
+(t/with-clock (t/mock-clock (t/instant "2020-09-24T22:51:00.000Z"))
+  (request/logout-redirect-location
+   {:issuer     "http://sp.example.com/demo1/metadata.php"
+    :user-email "user@example.com"
+    :idp-url    "http://idp.example.com/SSOService.php"
+    :request-id "ONELOGIN_109707f0030a5d00620c9d9df97f627afe9dcc24"
+    :relay-state (encode-decode/str->base64 "http://sp.example.com/demo1/metadata.php")}))
+
+(defn parse-query-params [url]
+  (let [query (-> (URI. url) .getQuery)
+        pairs (str/split query #"\&")]
+    (reduce (fn [params pair]
+              (let [[key val] (str/split pair #"=" 2)]
+                (assoc params key val)))
+            {}
+            pairs)))
+
+(deftest logout-location-test
+  (t/with-clock (t/mock-clock (t/instant "2020-09-24T22:51:00.000Z"))
+    (let [req-id "ONELOGIN_109707f0030a5d00620c9d9df97f627afe9dcc24"
+          idp-url "http://idp.example.com/SSOService.php"
+          user-email "user@example.com"
+          issuer "http://sp.example.com/demo1/metadata.php"
+          location
+          (request/logout-redirect-location
+            {:issuer     issuer
+             :user-email user-email
+             :idp-url    idp-url
+             :request-id req-id
+             :relay-state (encode-decode/str->base64 issuer)})]
+      (let [{:strs [SAMLRequest RelayState]} (parse-query-params location)]
+        (is (= (coerce/->xml-string (request/make-logout-request-xml :request-id req-id :idp-url idp-url :issuer issuer :user-email user-email))
+               (encode-decode/base64->inflate->str SAMLRequest))
+            "SAMLRequest is generated correctly")
+        (is (= issuer (encode-decode/base64->str RelayState)))))))
