@@ -1,13 +1,12 @@
 (ns saml20-clj.sp.request-test
   (:require [clojure.string :as str]
-            [clojure.test :refer :all]
+            [clojure.test :refer [deftest is testing]]
             [java-time.api :as t]
             [saml20-clj.coerce :as coerce]
             [saml20-clj.encode-decode :as encode-decode]
             [saml20-clj.sp.request :as request]
-            [saml20-clj.test :as test]
-            [saml20-clj.encode-decode :as encode])
-  (:import [java.net URI URLDecoder]))
+            [saml20-clj.test :as test])
+  (:import [java.net URI]))
 
 (def target-uri "http://sp.example.com/demo1/index.php?acs")
 
@@ -255,9 +254,9 @@
              :user-email user-email
              :idp-url    idp-url
              :request-id req-id
-             :relay-state (encode-decode/str->base64 issuer)})]
-      (let [{:strs [SAMLRequest RelayState]} (parse-query-params location)]
-        (is (= (coerce/->xml-string (request/make-logout-request-xml :request-id req-id :idp-url idp-url :issuer issuer :user-email user-email))
-               (encode-decode/base64->inflate->str SAMLRequest))
-            "SAMLRequest is generated correctly")
-        (is (= issuer (encode-decode/base64->str RelayState)))))))
+             :relay-state (encode-decode/str->base64 issuer)})
+          {:strs [SAMLRequest RelayState]} (parse-query-params location)]
+      (is (= (coerce/->xml-string (request/make-logout-request-xml :request-id req-id :idp-url idp-url :issuer issuer :user-email user-email))
+             (encode-decode/base64->inflate->str SAMLRequest))
+          "SAMLRequest is generated correctly")
+      (is (= issuer (encode-decode/base64->str RelayState))))))
