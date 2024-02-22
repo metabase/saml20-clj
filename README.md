@@ -64,7 +64,9 @@ implementation if you need something more sophisticated.
 (def state-manager (saml/in-memory-state-manager))
 ```
 
-### Requests
+### Logging In (SSO)
+
+#### Requests
 
 Basic usage for requests to the IdP looks like:
 
@@ -96,7 +98,7 @@ The `:credential` can be used to sign the request to the IdP, and attach any pub
       :password "keystore-password"
       :alias    "key-alias"}`: A map describing a keystore and alias used.
 
-### Responses
+#### Responses
 
 Basic usage for responses from the IdP looks like this (assuming a Ring `request`):
 
@@ -230,6 +232,41 @@ shown below:
  :address]
 ```
 
+### Logging Out (SLO)
+
+#### Requests
+
+Basic usage for logging out is to send the client a redirect to the IdP, with a LogoutResponse SAML message. This is
+done in the following manner:
+
+```clj
+(request/idp-logout-redirect-response
+  "Your SP Name"
+  "logmeout@example.com" ;; the user's email
+  "http://sp.example.com/demo1/metadata.php"
+  (encode-decode/str->base64 "http://sp.example.com/demo1/metadata.php"))
+  "my_random_id_42") ;; req-id is optional, and will get created for you.
+
+```
+
+Some clients will prefer that you send them the `SAMLRequest` as a query parameter, and they will handle the redirect, for that purpose you can use the `logout-redirect-location` function, which will include the `RelayState` and `SAMLRequest` as query parameters.
+
+```clj
+(request/logout-redirect-location
+   {:issuer     "http://sp.example.com/demo1/metadata.php"
+    :user-email "user@example.com"
+    :idp-url    "http://idp.example.com/SSOService.php"
+    :request-id "ONELOGIN_109707f0030a5d00620c9d9df97f627afe9dcc24"
+    :relay-state (encode-decode/str->base64 "http://sp.example.com/demo1/metadata.php")})
+
+;; =>
+;; "http://idp.example.com/SSOService.php?SAMLRequest=fVLLbs<snip>&RelayState=aHR<snip>"
+```
+
+#### Responses
+
+The IdP will redirect the client back to you, with a `SAMLResponse` in their query-params. You can validate this response by checking for the `SAMLResponse`'s `Status`.
+
 ## Differences from the original `saml20-clj` library
 
 This repository is forked from [vlacs/saml20-clj](https://github.com/vlacs/saml20-clj), and at this point is more or less a complete re-write.
@@ -246,11 +283,12 @@ This repository is forked from [vlacs/saml20-clj](https://github.com/vlacs/saml2
    *  Reorganized code
    *  Removed tons of duplicate/unnecessary, untested code
    *  Fixed `<Assertion>` signatures not being validated
+   *  Added Single Logout (SLO)
 
 ## License
 
 * Copyright © 2013 VLACS <jdoane@vlacs.org>
 * Copyright © 2017 Kenji Nakamura <kenji@signifier.jp>
-* Copyright © 2019-2022 [Metabase, Inc.](https://metabase.com)
+* Copyright © 2019-2024 [Metabase, Inc.](https://metabase.com)
 
 Distributed under the Eclipse Public License, the same as Clojure.
