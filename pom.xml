@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <licenses>
+    <license>
+      <name>Eclipse Public License 2.0</name>
+      <url>https://www.eclipse.org/legal/epl-2.0/</url>
+      <distribution>repo</distribution>
+      <comments>An open source, community-driven license</comments>
+    </license>
+  </licenses>
+</project>
