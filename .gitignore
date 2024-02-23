@@ -20,6 +20,7 @@
 /classes
 /config.edn
 /lib
+/pom.xml
 /pom.xml.asc
 /profiles.clj
 /resources/public/js/main.js
