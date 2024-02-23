@@ -139,10 +139,10 @@ c7tL1QjbfAUHAQYwmHkWgPP+T2wAv0pOt36GgMCM
       (testing "public only"
         (is (= idp-fingerprints
                (x509-credential-fingerprints (coerce/->Credential {:filename test/keystore-filename
-                                                                       :password test/keystore-password
-                                                                       :alias    "idp"})))))
+                                                                   :password test/keystore-password
+                                                                   :alias    "idp"})))))
       (testing "public + private"
         (is (= sp-fingerprints
                (x509-credential-fingerprints (coerce/->Credential {:filename test/keystore-filename
-                                                                       :password test/keystore-password
-                                                                       :alias    "sp"}))))))))
+                                                                   :password test/keystore-password
+                                                                   :alias    "sp"}))))))))

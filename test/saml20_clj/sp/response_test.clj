@@ -1,6 +1,6 @@
 (ns saml20-clj.sp.response-test
   (:require [clojure.test :refer :all]
-            [java-time :as t]
+            [java-time.api :as t]
             [saml20-clj.coerce :as coerce]
             [saml20-clj.sp.response :as response]
             [saml20-clj.test :as test])
@@ -167,9 +167,9 @@
   (t/with-clock (t/mock-clock (t/instant "2020-09-24T00:00:00.000Z"))
     (is (= :valid
            (validate-assertions :not-before nil))))
-    (testing "should respect clock skew"
-      (is (= :valid
-             (validate-assertions :not-before {:allowable-clock-skew-seconds (* 60 60 24 365)}))))
+  (testing "should respect clock skew"
+    (is (= :valid
+           (validate-assertions :not-before {:allowable-clock-skew-seconds (* 60 60 24 365)}))))
   (t/with-clock (t/mock-clock (t/instant "2010-09-24T00:00:00.000Z"))
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
@@ -295,7 +295,7 @@
                              :address         "192.168.1.1",
                              :recipient       "http://sp.example.com/demo1/index.php?acs"}}
              (response/Assertion->map
-               (first (response/opensaml-assertions (coerce/->Response response))))))))
+              (first (response/opensaml-assertions (coerce/->Response response))))))))
   (testing "Attribute Nodes sharing a Name will collect all of their contained Attribute Value Nodes."
     (let [response (test/response {})]
       (is (= {"uid"                  '("test")
@@ -305,4 +305,4 @@
               ;; this key is from two Attribute nodes with the same Name
               "member_of"            '("test-group1" "test-group2" "test-group3")}
              (:attrs (response/Assertion->map
-                       (first (response/opensaml-assertions (coerce/->Response response))))))))))
+                      (first (response/opensaml-assertions (coerce/->Response response))))))))))

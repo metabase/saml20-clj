@@ -1,6 +1,6 @@
 (ns saml20-clj.crypto-test
   (:require [clojure.test :refer :all]
-            [java-time :as t]
+            [java-time.api :as t]
             [saml20-clj.coerce :as coerce]
             [saml20-clj.crypto :as crypto]
             [saml20-clj.sp.request :as request]
@@ -59,28 +59,28 @@
 (deftest sign-request-test-bad-params
   (testing "Signature should throw errors with bad params"
     (let [signed (coerce/->Element (coerce/->xml-string
-                                   [:samlp:AuthnRequest
-                                    {:xmlns:samlp                 "urn:oasis:names:tc:SAML:2.0:protocol"
-                                     :ID                          1234
-                                     :Version                     "2.0"
-                                     :IssueInstant                1234
-                                     :ProtocolBinding             "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
-                                     :ProviderName                "name"
-                                     :IsPassive                   false
-                                     :Destination                 "url"
-                                     :AssertionConsumerServiceURL "url"}
-                                    [:saml:Issuer
-                                     {:xmlns:saml "urn:oasis:names:tc:SAML:2.0:assertion"}
-                                     "issuer"]]))]
-        (is (thrown-with-msg?
-             clojure.lang.ExceptionInfo
-             #"No matching signature algorithm"
-             (crypto/sign signed test/sp-private-key :signature-algorithm [:rsa :crazy])))
+                                    [:samlp:AuthnRequest
+                                     {:xmlns:samlp                 "urn:oasis:names:tc:SAML:2.0:protocol"
+                                      :ID                          1234
+                                      :Version                     "2.0"
+                                      :IssueInstant                1234
+                                      :ProtocolBinding             "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
+                                      :ProviderName                "name"
+                                      :IsPassive                   false
+                                      :Destination                 "url"
+                                      :AssertionConsumerServiceURL "url"}
+                                     [:saml:Issuer
+                                      {:xmlns:saml "urn:oasis:names:tc:SAML:2.0:assertion"}
+                                      "issuer"]]))]
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"No matching signature algorithm"
+           (crypto/sign signed test/sp-private-key :signature-algorithm [:rsa :crazy])))
 
-        (is (thrown-with-msg?
-             clojure.lang.ExceptionInfo
-             #"matching canonicalization algorithm"
-             (crypto/sign signed test/sp-private-key :canonicalization-algorithm [:bad]))))))
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"matching canonicalization algorithm"
+           (crypto/sign signed test/sp-private-key :canonicalization-algorithm [:bad]))))))
 
 (deftest has-private-key-test
   (testing "has private key"

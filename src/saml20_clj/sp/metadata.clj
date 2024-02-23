@@ -30,8 +30,7 @@
            [:ds:X509Data
             [:ds:X509Certificate encoded-cert]]]])
        (when slo-url
-         [:md:SingleLogoutService {:Binding "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
-                                   :Location slo-url}])
+         [:md:SingleLogoutService {:Binding "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" :Location slo-url}])
        [:md:NameIDFormat "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"]
        [:md:NameIDFormat "urn:oasis:names:tc:SAML:2.0:nameid-format:transient"]
        [:md:NameIDFormat "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent"]
