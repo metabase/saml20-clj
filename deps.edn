@@ -88,19 +88,9 @@
   :include-license
   {:extra-paths ["license"]}
 
-  ;; clojure -X:jar :version "\"$(cat VERSION.txt)\""
-  :jar
-  {:replace-deps {com.github.seancorfield/depstar {:mvn/version "2.1.303"}}
-   :exec-fn      hf.depstar/jar
-   :exec-args    {:group-id    "metabase"
-                  :artifact-id "saml20-clj"
-                  :jar         "target/saml20-clj.jar"
-                  :sync-pom    true
-                  :paths-only  true
-                  :aliases     [:include-license]}}
-
-  ;; clojure -X:deploy :artifact '"target/saml20-clj.jar"'
-  :deploy
-  {:extra-deps {slipset/deps-deploy {:mvn/version "RELEASE"}}
-   :exec-fn    deps-deploy.deps-deploy/deploy
-   :exec-args  {:installer :remote}}}}
+  ;; clojure -T:build build
+  ;; clojure -T:build deploy
+  :build
+  {:deps       {io.github.clojure/tools.build {:mvn/version "0.9.6"}
+                slipset/deps-deploy           {:mvn/version "0.2.2"}}
+   :ns-default build}}}
