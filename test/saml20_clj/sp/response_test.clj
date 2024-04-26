@@ -47,7 +47,7 @@
           (testing (str "\noriginal =\n" (coerce/->xml-string original))
             (testing (str "decrypted =\n" (coerce/->xml-string decrypted))
               (prn :original (coerce/->xml-string original))
-              (prn :descrypted (coerce/->xml-string decrypted))
+              (prn :decrypted (coerce/->xml-string decrypted))
               (is (= 0
                      (count (.getEncryptedAssertions decrypted))))
               (is (= 1
