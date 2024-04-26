@@ -102,15 +102,15 @@
   (assert (non-blank-string? idp-url) "idp-url is required")
   (assert (non-blank-string? issuer) "issuer is required")
   (assert (non-blank-string? user-email) "user-email is required")
-  [:samlp:LogoutRequest {:xmlns:samlp "urn:oasis:names:tc:SAML:2.0:protocol"
+  [:samlp:LogoutRequest {:xmlns "urn:oasis:names:tc:SAML:2.0:protocol"
+                         :xmlns:samlp "urn:oasis:names:tc:SAML:2.0:protocol"
                          :xmlns:saml "urn:oasis:names:tc:SAML:2.0:assertion"
                          :Version "2.0"
                          :ID (or request-id (str "id" (random-uuid)))
                          :IssueInstant instant
                          :Destination idp-url}
-   [:saml:Issuer issuer]
-   [:saml:NameID {:Format "urn:oasis:names:tc:SAML:2.0:nameid-format:emailAddress"} user-email]
-   [:samlp:SessionIndex "SessionIndex_From_Authentication_Assertion"]])
+   [:Issuer issuer]
+   [:NameID {:Format "urn:oasis:names:tc:SAML:2.0:nameid-format:emailAddress"} user-email]])
 
 (defn logout-redirect-location
   "This returns a url that you'd want to redirect a client to. Either using
