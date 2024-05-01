@@ -189,8 +189,7 @@
         (doseq [v [nil "" "    " false true 100]]
           (testing (format "\n%s = %s" k (pr-str v))
             (let [request (assoc request k v)]
-              (is (thrown-with-msg?
-                   java.lang.AssertionError
+              (is (thrown-with-msg? java.lang.AssertionError
                    (re-pattern (format "%s is required" (name k)))
                    (request/request request))))))))))
 
