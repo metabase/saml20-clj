@@ -109,8 +109,9 @@
                          :ID (or request-id (str "id" (random-uuid)))
                          :IssueInstant instant
                          :Destination idp-url}
-   [:Issuer issuer]
-   [:NameID {:Format "urn:oasis:names:tc:SAML:2.0:nameid-format:emailAddress"} user-email]])
+   [:Issuer {:xmlns "urn:oasis:names:tc:SAML:2.0:assertion"} issuer]
+   [:NameID {:xmlns "urn:oasis:names:tc:SAML:2.0:assertion"
+             :Format "urn:oasis:names:tc:SAML:2.0:nameid-format:emailAddress"} user-email]])
 
 (defn logout-redirect-location
   "This returns a url that you'd want to redirect a client to. Either using
