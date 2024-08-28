@@ -13,6 +13,7 @@
 /.lein-failures
 /.lein-plugins
 /.lein-repl-history
+/.lsp
 /.nrepl-port
 /build.xml
 /checkouts
