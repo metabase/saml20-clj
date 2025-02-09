@@ -76,7 +76,9 @@
                  (= (.getNamespaceURI element) "urn:oasis:names:tc:SAML:2.0:assertion"))
         (decrypt! sp-private-key element))
       (doseq [i     (range (.. element getChildNodes getLength))
-              :let  [child (.. element getChildNodes (item i))]
+              ;; Explict typehinting here required by Cloverage
+              :let  [^org.w3c.dom.NodeList nodes (.getChildNodes element)
+                     child (.item nodes i)]
               :when (instance? org.w3c.dom.Element child)]
         (recursive-decrypt! sp-private-key child)))))
 
