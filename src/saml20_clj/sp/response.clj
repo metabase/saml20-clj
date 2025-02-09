@@ -366,7 +366,7 @@
                             (apply (partial merge-with concat)))
           audiences    (for [^AudienceRestriction restriction (.. assertion getConditions getAudienceRestrictions)
                              ^Audience audience               (.getAudiences restriction)]
-                                      (.getAudienceURI audience))]
+                         (.getURI audience))]
       {:attrs        attrs
        :audiences    audiences
        :name-id      {:value  (some-> name-id .getValue)
