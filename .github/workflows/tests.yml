@@ -6,17 +6,6 @@ on:
 
 jobs:
 
-  Test-Java-11:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4.1.7
-      - uses: ./.github/actions/setup
-        with:
-          java-version: 11
-          cache-key: "test"
-      - run: clojure -X:dev:test
-
   Test-Java-17:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -28,6 +17,18 @@ jobs:
           cache-key: "test"
       - run: clojure -X:dev:test
 
+  Test-Java-21:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4.1.7
+      - uses: ./.github/actions/setup
+        with:
+          java-version: 21
+          cache-key: "test"
+      - run: clojure -X:dev:test
+
+
   Cloverage:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -35,7 +36,7 @@ jobs:
       - uses: actions/checkout@v4.1.7
       - uses: ./.github/actions/setup
         with:
-          java-version: 11
+          java-version: 21
           cache-key: "cloverage"
       - run: clojure -X:dev:cloverage
       - name: Upload code coverage to codecov.io
