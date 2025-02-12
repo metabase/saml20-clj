@@ -2,7 +2,7 @@ name: Setup
 inputs:
   java-version:
     required: true
-    default: 17
+    default: 21
   cache-key:
     required: true
     default: "deps"
@@ -11,7 +11,7 @@ runs:
   using: composite
   steps:
     - name: Prepare JDK
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         java-version: ${{ inputs.java-version }}
         distribution: temurin
