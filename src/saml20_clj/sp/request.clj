@@ -3,9 +3,17 @@
             [java-time.api :as t]
             [ring.util.codec :as codec]
             [saml20-clj.coerce :as coerce]
-            [saml20-clj.crypto :as crypto]
             [saml20-clj.encode-decode :as encode-decode]
-            [saml20-clj.state :as state]))
+            [saml20-clj.state :as state])
+  (:import org.opensaml.messaging.context.MessageContext
+           [org.opensaml.saml.common.messaging.context SAMLBindingContext SAMLEndpointContext SAMLPeerEntityContext]
+           org.opensaml.saml.common.xml.SAMLConstants
+           org.opensaml.saml.saml2.binding.encoding.impl.HTTPRedirectDeflateEncoder
+           [org.opensaml.saml.saml2.core AuthnRequest NameIDType]
+           [org.opensaml.saml.saml2.core.impl AuthnRequestBuilder IssuerBuilder NameIDPolicyBuilder]
+           org.opensaml.saml.saml2.metadata.impl.SingleSignOnServiceBuilder
+           org.opensaml.xmlsec.context.SecurityParametersContext
+           org.opensaml.xmlsec.SignatureSigningParameters))
 
 (defn- format-instant
   "Converts a date-time to a SAML 2.0 time string."
@@ -21,54 +29,84 @@
   []
   (str "id" (random-uuid)))
 
-(defn- make-auth-xml [request-id instant sp-name idp-url acs-url issuer]
-  [:samlp:AuthnRequest
-   {:xmlns:samlp                 "urn:oasis:names:tc:SAML:2.0:protocol"
-    :ID                          (or request-id (random-request-id))
-    :Version                     "2.0"
-    :IssueInstant                (format-instant instant)
-    :ProtocolBinding             "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
-    :ProviderName                sp-name
-    :IsPassive                   false
-    :Destination                 idp-url
-    :AssertionConsumerServiceURL acs-url}
-   [:saml:Issuer
-    {:xmlns:saml "urn:oasis:names:tc:SAML:2.0:assertion"}
-    issuer]
-   ;;[:samlp:NameIDPolicy {:AllowCreate false :Format saml-format}]
-   ])
+(def ^:private -sig-alg "http://www.w3.org/2000/09/xmldsig#rsa-sha1")
+
+(defn build-authn-obj
+  ^AuthnRequest [request-id instant sp-name idp-url acs-url issuer]
+  (doto (.buildObject (AuthnRequestBuilder.)
+    ;; these override the xml qname used by opensaml so our generate messages don't
+    ;; change. As far I can tell from the spec, is it fine for these qnames to either
+    ;; be samlp/saml like our previous xml generation or to be saml2p/saml2 which
+    ;; opensaml deafults to
+                      SAMLConstants/SAML20P_NS
+                      "AuthnRequest"
+                      "samlp")
+    (.setID request-id)
+    (.setIssueInstant instant)
+    (.setDestination idp-url)
+    (.setProtocolBinding SAMLConstants/SAML2_REDIRECT_BINDING_URI)
+    (.setIsPassive false)
+    (.setProviderName sp-name)
+    (.setAssertionConsumerServiceURL acs-url)
+    (.setNameIDPolicy (doto (.buildObject (NameIDPolicyBuilder.)
+                                          SAMLConstants/SAML20P_NS
+                                          "NameIDPolicy"
+                                          "samlp")
+                        (.setFormat NameIDType/UNSPECIFIED)))
+    (.setIssuer (doto (.buildObject (IssuerBuilder.)
+                                    SAMLConstants/SAML20_NS
+                                    "Issuer"
+                                    "saml")
+                  (.setValue issuer)))))
 
 (defn request
-  "Return XML elements that represent a SAML 2.0 auth request."
-  ^org.w3c.dom.Element [{:keys [ ;; e.g. something like a UUID. Random UUID will be used if no other ID is provided
-                                request-id
-                                ;; e.g. "Metabase"
-                                sp-name
-                                ;; e.g. http://sp.example.com/demo1/index.php?acs
-                                acs-url
-                                ;; e.g. http://idp.example.com/SSOService.php
-                                idp-url
-                                ;; e.g. http://sp.example.com/demo1/metadata.php
-                                issuer
-                                ;; If present, record the request
-                                state-manager
-                                ;; If present, we can sign the request
-                                credential
-                                instant]
-                         :or   {instant (t/instant)}}]
+  "Return an OpenSAML MessageContext Object with a SAML AuthnRequest."
+  ^MessageContext [{:keys [;; e.g. something like a UUID. Random UUID will be used if no other ID is provided
+                           request-id
+                           ;; e.g. "Metabase"
+                           sp-name
+                           ;; e.g. http://sp.example.com/demo1/index.php?acs
+                           acs-url
+                           ;; e.g. http://idp.example.com/SSOService.php
+                           idp-url
+                           ;; e.g. http://sp.example.com/demo1/metadata.php
+                           issuer
+                           ;; If present, record the request
+                           state-manager
+                           ;; If present, we can sign the request
+                           credential
+                           ;; Signature Algorithm
+                           sig-alg
+                           instant]
+                    :or   {instant (t/instant)
+                           request-id (random-request-id)
+                           sig-alg -sig-alg}}]
   (assert (non-blank-string? acs-url) "acs-url is required")
   (assert (non-blank-string? idp-url) "idp-url is required")
   (assert (non-blank-string? sp-name) "sp-name is required")
   (assert (non-blank-string? issuer) "issuer is required")
-  (let [request (coerce/->Element
-                  (coerce/->xml-string
-                    (make-auth-xml request-id instant sp-name idp-url acs-url issuer)))]
+  (let [request (build-authn-obj request-id instant sp-name idp-url acs-url issuer)
+        msgctx (doto (MessageContext.) (.setMessage request))]
     (when state-manager
-      (state/record-request! state-manager (.getAttribute request "ID")))
-    (if-not credential
-      request
-      (or (crypto/sign request credential)
-          (throw (ex-info "Failed to sign request" {:request request}))))))
+      (state/record-request! state-manager (.getID request)))
+    (when credential
+      (let [decoded-credential (try
+                                 (coerce/->Credential credential)
+                                 (catch Throwable _
+                                   (coerce/->Credential (coerce/->PrivateKey credential))))
+            ^SecurityParametersContext security-context (.getSubcontext msgctx SecurityParametersContext true)]
+        (.setSignatureSigningParameters security-context
+                                        (doto (SignatureSigningParameters.)
+                                          (.setSignatureAlgorithm sig-alg)
+                                          (.setSigningCredential decoded-credential)))))
+
+    (let [^SAMLPeerEntityContext peer-context (.getSubcontext msgctx SAMLPeerEntityContext true)
+          ^SAMLEndpointContext endpoint-context (.getSubcontext peer-context SAMLEndpointContext true)]
+      (.setEndpoint endpoint-context
+                    (doto (.buildObject (SingleSignOnServiceBuilder.))
+                      (.setBinding SAMLConstants/SAML2_REDIRECT_BINDING_URI)
+                      (.setLocation idp-url))))
+    msgctx))
 
 (defn- add-query-params
   "Add query parameters to a URL.
@@ -78,20 +116,41 @@
   [url params]
   (str url (if (str/includes? url "?") "&" "?") (codec/form-encode params)))
 
+(defn- map-making-servlet
+  "Implements a minimum HttpServletResponse for HTTPRedirectDeflateEncoder"
+  []
+  (let [response (atom {:status 302 :body "" :headers {}})
+        servlet-wrapper (reify jakarta.servlet.http.HttpServletResponse
+                          (setHeader [_this name value]
+                            (swap! response update :headers assoc name value))
+                          (^void setCharacterEncoding [_ ^String _])
+                          (sendRedirect [this redirect]
+                            (.setHeader this "location" redirect)))
+        wrapper-supplier (reify net.shibboleth.shared.primitive.NonnullSupplier
+                           (get [_] servlet-wrapper))]
+    [wrapper-supplier #(deref response)]))
+
 (defn idp-redirect-response
   "Return Ring response for HTTP 302 redirect."
-  [saml-request idp-url relay-state]
+  [^MessageContext saml-request relay-state]
   {:pre [(some? saml-request)
-         (string? idp-url)
          (string? relay-state)]}
-  (let [saml-request-str (cond-> saml-request
-                           (not (string? saml-request)) coerce/->xml-string)
-        saml-request-str (encode-decode/str->deflate->base64 saml-request-str)
-        url              (add-query-params idp-url {:SAMLRequest saml-request-str
-                                                    :RelayState relay-state})]
-    {:status  302 ; found
-     :headers {"Location" url}
-     :body    ""}))
+
+  ;; implmenets HttpServletResponse interface and provides a function for retrieving the request
+  ;; as a ring map
+  (let [[servlet ->ring-request] (map-making-servlet)
+        ^SAMLBindingContext binding-context (.getSubcontext saml-request SAMLBindingContext true)]
+    ;; set the relay state
+    (.setRelayState binding-context relay-state)
+
+    ;; Hand over to an opensaml encoder with a servletresponse implementation that allows us to
+    ;; retrieve the result as a ring map
+    (doto (HTTPRedirectDeflateEncoder.)
+      (.setMessageContext saml-request)
+      (.setHttpServletResponseSupplier servlet)
+      (.initialize)
+      (.encode))
+    (->ring-request)))
 
 ;; I wanted to call this make-request-xml, but it gets exported in core.clj, which
 ;; warrants the request prefix
@@ -123,11 +182,11 @@
   (assert (non-blank-string? issuer) "issuer is required")
   (assert (non-blank-string? relay-state) "relay-state is required")
   (add-query-params idp-url {:SAMLRequest (encode-decode/str->deflate->base64
-                                            (coerce/->xml-string (make-logout-request-xml
-                                                                   :idp-url idp-url
-                                                                   :request-id request-id
-                                                                   :issuer issuer
-                                                                   :user-email user-email)))
+                                           (coerce/->xml-string (make-logout-request-xml
+                                                                 :idp-url idp-url
+                                                                 :request-id request-id
+                                                                 :issuer issuer
+                                                                 :user-email user-email)))
                              :RelayState relay-state}))
 
 (defn idp-logout-redirect-response
@@ -136,11 +195,11 @@
    (idp-logout-redirect-response issuer user-email idp-url relay-state (random-request-id)))
   ([issuer user-email idp-url relay-state request-id]
    (let [url (logout-redirect-location
-               :idp-url idp-url
-               :user-email user-email
-               :issuer issuer
-               :relay-state relay-state
-               :request-id request-id)]
+              :idp-url idp-url
+              :user-email user-email
+              :issuer issuer
+              :relay-state relay-state
+              :request-id request-id)]
      {:status  302 ; found
       :headers {"Location" url}
       :body    ""})))

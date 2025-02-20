@@ -84,8 +84,7 @@ Basic usage for requests to the IdP looks like:
       ;; :credential is optional. If passed, sign the request with this key and attach public key data, if present
       :credential       sp-private-key})
     ;; create a Ring redirect response to the IDP URL; pass the request as base-64 encoded `SAMLRequest` query parameter
-    (saml/idp-redirect-response "http://idp.example.com/SSOService.php"
-                                ;; This is RelayState. In the old version of the lib it was encrypted. In some cases,
+    (saml/idp-redirect-response ;; This is RelayState. In the old version of the lib it was encrypted. In some cases,
                                 ;; like this it's not really sensitive so it doesn't need to be encrypted. Adding
                                 ;; automatic encryption support back is on the TODO list
                                 "http://sp.example.com/please/redirect/me/to/here"))

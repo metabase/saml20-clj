@@ -4,7 +4,8 @@
             [hiccup.core :as hiccup]
             [hiccup.page :as h.page]
             [saml20-clj.encode-decode :as encode-decode]
-            [saml20-clj.xml :as saml.xml]))
+            [saml20-clj.xml :as saml.xml])
+  (:import org.opensaml.core.xml.util.XMLObjectSupport))
 
 ;; these have to be initialized before using.
 ;;
@@ -313,4 +314,9 @@
 
   org.opensaml.core.xml.XMLObject
   (->xml-string [this]
-    (->xml-string (.getDOM this))))
+    (->xml-string (.getDOM this)))
+
+  org.opensaml.messaging.context.MessageContext
+  (->xml-string [this]
+    (->xml-string (XMLObjectSupport/marshall (.getMessage this))))
+  )
