@@ -5,8 +5,7 @@
             [saml20-clj.coerce :as coerce]
             [saml20-clj.encode-decode :as encode-decode]
             [saml20-clj.sp.request :as request]
-            [saml20-clj.test :as test])
-  (:import java.net.URI))
+            [saml20-clj.test :as test]))
 
 (def target-uri "http://sp.example.com/demo1/index.php?acs")
 
@@ -137,77 +136,62 @@
                                     (re-pattern (format "%s is required" (name k)))
                                     (request/request request))))))))))
 
-(deftest logout-request-test
-  (let [logout-xml (t/with-clock (t/mock-clock (t/instant "2020-09-24T22:51:00.000Z"))
-                     (request/make-logout-request-xml
-                      {:request-id "ONELOGIN_109707f0030a5d00620c9d9df97f627afe9dcc24"
-                       :user-email "user@example.com"
-                       :idp-url    "http://idp.example.com/SSOService.php"
-                       :issuer     "http://sp.example.com/demo1/metadata.php"}))]
-    (is (= [:samlp:LogoutRequest
-            {:xmlns "urn:oasis:names:tc:SAML:2.0:protocol",
-             :xmlns:samlp "urn:oasis:names:tc:SAML:2.0:protocol",
-             :xmlns:saml "urn:oasis:names:tc:SAML:2.0:assertion",
-             :Version "2.0",
-             :ID "ONELOGIN_109707f0030a5d00620c9d9df97f627afe9dcc24",
-             :IssueInstant "2020-09-24T22:51:00Z",
-             :Destination "http://idp.example.com/SSOService.php"}
-            [:Issuer
-             {:xmlns "urn:oasis:names:tc:SAML:2.0:assertion"}
-             "http://sp.example.com/demo1/metadata.php"]
-            [:NameID
-             {:xmlns "urn:oasis:names:tc:SAML:2.0:assertion",
-              :Format "urn:oasis:names:tc:SAML:2.0:nameid-format:emailAddress"}
-             "user@example.com"]]
-           logout-xml))))
-
-(t/with-clock (t/mock-clock (t/instant "2020-09-24T22:51:00.000Z"))
-  (request/logout-redirect-location
-   {:issuer     "http://sp.example.com/demo1/metadata.php"
-    :user-email "user@example.com"
-    :idp-url    "http://idp.example.com/SSOService.php"
-    :request-id "ONELOGIN_109707f0030a5d00620c9d9df97f627afe9dcc24"
-    :relay-state (encode-decode/str->base64 "http://sp.example.com/demo1/metadata.php")}))
-
-(defn parse-query-params [url]
-  (let [query (-> (URI. url) .getQuery)
-        pairs (str/split query #"\&")]
-    (reduce (fn [params pair]
-              (let [[key val] (str/split pair #"=" 2)]
-                (assoc params key val)))
-            {}
-            pairs)))
-
-(deftest logout-location-test
-  (t/with-clock (t/mock-clock (t/instant "2020-09-24T22:51:00.000Z"))
-    (let [req-id "ONELOGIN_109707f0030a5d00620c9d9df97f627afe9dcc24"
-          idp-url "http://idp.example.com/SSOService.php"
-          user-email "user@example.com"
-          issuer "http://sp.example.com/demo1/metadata.php"
-          location
-          (request/logout-redirect-location
-           {:issuer     issuer
-            :user-email user-email
-            :idp-url    idp-url
-            :request-id req-id
-            :relay-state (encode-decode/str->base64 issuer)})
-          {:strs [SAMLRequest RelayState]} (parse-query-params location)]
-      (is (= (coerce/->xml-string (request/make-logout-request-xml :request-id req-id :idp-url idp-url :issuer issuer :user-email user-email))
-             (encode-decode/base64->inflate->str SAMLRequest))
-          "SAMLRequest is generated correctly")
-      (is (= issuer (encode-decode/base64->str RelayState))))))
-
 (deftest idp-logout-redirect-response-test
   (t/with-clock (t/mock-clock (t/instant "2020-09-24T22:51:00.000Z"))
     (let [req-id "ONELOGIN_109707f0030a5d00620c9d9df97f627afe9dcc24"
           idp-url "http://idp.example.com/SSOService.php"
           user-email "user@example.com"
-          issuer "http://sp.example.com/demo1/metadata.php"
-          logout-url (request/logout-redirect-location
-                      {:issuer     issuer
-                       :user-email user-email
-                       :idp-url    idp-url
-                       :request-id req-id
-                       :relay-state (encode-decode/str->base64 issuer)})
-          redirect (request/idp-logout-redirect-response issuer user-email idp-url (encode-decode/str->base64 issuer) req-id)]
-      (is (= logout-url (get-in redirect [:headers "Location"]))))))
+          issuer "http://sp.example.com/demo1/metadata.php"]
+      (testing "without signing"
+
+        (is (= {:status 302
+                :headers {"Cache-control" "no-cache, no-store"
+                          "Pragma" "no-cache"
+                          "location" (str
+                                      "http://idp.example.com/SSOService.php?SAMLRequest="
+                                      "nZHLTsMwEEV%2FJfK%2BycS0DbGaFKQAihRaiRQWbJBlT9pI8Y"
+                                      "PYqfr5pA%2BkwoIFO4%2Bse88czWJ5UF2wx961RmckDoEEqIWR"
+                                      "rd5m5HXzOLkly3zhuOosq8zWDP4FPwd0PhiD2rHTT0aGXjPDXe"
+                                      "uY5god84LV988VoyEw2xtvhOlIUIy5VnN%2FYu28tyyKWmlDPH"
+                                      "BlOwyFUVFdr2vs963A0O4sCcoiI%2BvVQ7V%2BKlcfMaQJJA3A"
+                                      "DfCZBJhTEKlMZZMmzZwmvMFUCkGnY8y5AUvtPNc%2BIxQoTCCd"
+                                      "0OmGUjaLGUAIAO8kePtWHzclZ1F2yvZXgn%2F7ceewPzqR%2FO"
+                                      "LkfipJVCaOFHouuedHrUV0BbpQV2NxWfyHOoyvuyvgpf1cmJ%2"
+                                      "BnX9fLvwA%3D&RelayState=aHR0cDovL3NwLmV4YW1wbGUuY2"
+                                      "9tL2RlbW8xL21ldGFkYXRhLnBocA%3D%3D")}
+                :body ""}
+               (request/idp-logout-redirect-response
+                {:issuer issuer
+                 :user-email user-email
+                 :idp-url idp-url
+                 :relay-state (encode-decode/str->base64 issuer)
+                 :request-id req-id}))))
+      (testing "with signing"
+        (is (= {:status 302
+                :headers {"Cache-control" "no-cache, no-store"
+                          "Pragma" "no-cache"
+                          "location" (str
+                                      "http://idp.example.com/SSOService.php?SAMLRequest="
+                                      "nZHLTsMwEEV%2FJfK%2BycS0DbGaFKQAihRaiRQWbJBlT9pI8Y"
+                                      "PYqfr5pA%2BkwoIFO4%2Bse88czWJ5UF2wx961RmckDoEEqIWR"
+                                      "rd5m5HXzOLkly3zhuOosq8zWDP4FPwd0PhiD2rHTT0aGXjPDXe"
+                                      "uY5god84LV988VoyEw2xtvhOlIUIy5VnN%2FYu28tyyKWmlDPH"
+                                      "BlOwyFUVFdr2vs963A0O4sCcoiI%2BvVQ7V%2BKlcfMaQJJA3A"
+                                      "DfCZBJhTEKlMZZMmzZwmvMFUCkGnY8y5AUvtPNc%2BIxQoTCCd"
+                                      "0OmGUjaLGUAIAO8kePtWHzclZ1F2yvZXgn%2F7ceewPzqR%2FO"
+                                      "LkfipJVCaOFHouuedHrUV0BbpQV2NxWfyHOoyvuyvgpf1cmJ%2"
+                                      "BnX9fLvwA%3D&RelayState=aHR0cDovL3NwLmV4YW1wbGUuY2"
+                                      "9tL2RlbW8xL21ldGFkYXRhLnBocA%3D%3D&SigAlg=http%3A%"
+                                      "2F%2Fwww.w3.org%2F2000%2F09%2Fxmldsig%23rsa-sha1&S"
+                                      "ignature=oChvLW5JXLhuCbD38uNk7EQv9D4TwQxfMKNKCmd1N"
+                                      "RLE205H96kC1XBz%2BcTKN5Q1vqbEO%2Fg3u5esCSeEsElEkdd"
+                                      "0PKkRq9M64RyzLJg70jeCyQYEVRjM9k6TatAX8ge4dWMieyiE7"
+                                      "5yuOCGlASPZ1nck8cKxVtDTORLc6OaZ2vM%3D")}
+                :body ""}
+               (request/idp-logout-redirect-response
+                {:issuer issuer
+                 :credential test/sp-private-key
+                 :user-email user-email
+                 :idp-url idp-url
+                 :relay-state (encode-decode/str->base64 issuer)
+                 :request-id req-id})))))))
