@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<samlp:LogoutResponse xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="pfx9566981a-9a4e-9ec8-bcc1-cbef81faeae0" Version="2.0" IssueInstant="2014-07-18T01:13:06Z" Destination="http://sp.example.com/demo1/index.php?acs" InResponseTo="ONELOGIN_21df91a89767879fc0f7df6a1490c6000c81644d">
+  <saml:Issuer>http://idp.example.com/metadata.php</saml:Issuer><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+  <ds:SignedInfo><ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+    <ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
+  <ds:Reference URI="#pfx9566981a-9a4e-9ec8-bcc1-cbef81faeae0"><ds:Transforms><ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/></ds:Transforms><ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><ds:DigestValue>m7XJQJUS2sYpvSii5girw9RHnMw=</ds:DigestValue></ds:Reference></ds:SignedInfo><ds:SignatureValue>vz90lqoqtksqLgpxxt7pn29kykHZRONYoHcapZvp0Nc12k/jx+oZ4OpXOEf6YvktOup3BaB+t05VNFpuJckAa//HunwLkZvdfWt2eSyn+Bq5b0+5fnAVWjK2cqh1X0mfZFOXi7DvV1wLtXr8Tgb5QT4tD73YuTI29nT9Gs+ggkE=</ds:SignatureValue>
+<ds:KeyInfo><ds:X509Data><ds:X509Certificate>MIICZjCCAc+gAwIBAgIBADANBgkqhkiG9w0BAQ0FADBQMQswCQYDVQQGEwJ1czETMBEGA1UECAwKQ2FsaWZvcm5pYTETMBEGA1UECgwKRXhhbXBsZSBTUDEXMBUGA1UEAwwOc3AuZXhhbXBsZS5jb20wHhcNMjAwOTIzMTc0MzA2WhcNMzAwOTIxMTc0MzA2WjBQMQswCQYDVQQGEwJ1czETMBEGA1UECAwKQ2FsaWZvcm5pYTETMBEGA1UECgwKRXhhbXBsZSBTUDEXMBUGA1UEAwwOc3AuZXhhbXBsZS5jb20wgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBAMCOR6lM1raadHr3MnDU7ydGHUmMhZ5ZImwSHcxYrY6/F3TW+S6CPMuAfHJsNQZ57nG4wUhNCbfXdumfVxzoPMzD7oivKKVxeMK6HaUuGsGg9OK4ON++EVxomWdmPyJdHpiUaGveGU0BQgzI7aqNibncPYPxJgK9DZEIfDjp05lDAgMBAAGjUDBOMB0GA1UdDgQWBBStKfCHxILkLbv2tAEK54+Wn/xF+zAfBgNVHSMEGDAWgBStKfCHxILkLbv2tAEK54+Wn/xF+zAMBgNVHRMEBTADAQH/MA0GCSqGSIb3DQEBDQUAA4GBAIRA7mJdPPmTWc3wsPLDv+nMeR0nr5a6r8dZU5lOTqGfC43YvJ1NEysO3AB6YuiG1KKXERxtlISyYvU9wNrna2IPDU0njcU/a3dEBqa32lD3GxfUvbpzIcZovBYqQ7Jhfa86GvNKxRoyUEExVqyHh6i44S4NCJvr8IdnRilYBksl</ds:X509Certificate></ds:X509Data></ds:KeyInfo></ds:Signature>
+  <samlp:Status>
+    <samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/>
+  </samlp:Status>
+</samlp:LogoutResponse>

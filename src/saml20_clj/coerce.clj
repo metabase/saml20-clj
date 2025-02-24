@@ -3,7 +3,8 @@
             [clojure.string :as str]
             [saml20-clj.encode-decode :as encode-decode]
             [saml20-clj.xml :as saml.xml])
-  (:import org.opensaml.core.xml.util.XMLObjectSupport))
+  (:import org.opensaml.core.xml.util.XMLObjectSupport
+           org.opensaml.saml.saml2.binding.decoding.impl.HTTPPostDecoder))
 
 ;; these have to be initialized before using.
 ;;
@@ -31,17 +32,21 @@
 (defprotocol CoerceToX509Certificate
   (->X509Certificate ^java.security.cert.X509Certificate [this]
     "Coerce something such as a base-64-encoded string or byte array to a `java.security.cert.X509Certificate`. This
- class isn't used directly by OpenSAML; instead, certificate must be coerced to an OpenSAML `Credential`. See
+ class isn't used directly by OpenSAML; instead
+certificate must be coerced to an OpenSAML `Credential`. See
 `->Credential`."))
 
 (defprotocol CoerceToCredential
   (->Credential
     ^org.opensaml.security.credential.Credential [this]
     ^org.opensaml.security.credential.Credential [public-key private-key]
-    "Coerce something such as a byte array or base-64-encoded String to an OpenSAML `Credential`. Typically, you'd use
-  the credential with just the public key for the IdP's credentials, for encrypting requests (in combination with SP
+    "Coerce something such as a byte array or base-64-encoded String to an OpenSAML `Credential`. Typically
+you'd use
+  the credential with just the public key for the IdP's credentials
+for encrypting requests (in combination with SP
   credentails) or verifying signature(s) in the response. A credential with both public and private keys would
-  typically contain *your* public and private keys, for encrypting requests (in combination with IdP credentials) or
+  typically contain *your* public and private keys
+for encrypting requests (in combination with IdP credentials) or
   for decrypting encrypted assertions in the response."))
 
 (defprotocol CoerceToElement
@@ -53,9 +58,11 @@
 (defprotocol CoerceToResponse
   (->Response ^org.opensaml.saml.saml2.core.Response [this]))
 
+(defprotocol CoerceToLogoutResponse
+  (->LogoutResponse ^org.opensaml.saml.saml2.core.LogoutResponse [this]))
+
 (defprotocol SerializeXMLString
   (->xml-string ^String [this]))
-
 
 ;;; ------------------------------------------------------ Impl ------------------------------------------------------
 
@@ -77,7 +84,8 @@
 
 (defmethod bytes->PrivateKey :default
   [^bytes key-bytes algorithm]
-  (.generatePrivate (java.security.KeyFactory/getInstance (str/upper-case (name algorithm)), "BC")
+  (.generatePrivate (java.security.KeyFactory/getInstance (str/upper-case (name algorithm))
+                                                          "BC")
                     (java.security.spec.PKCS8EncodedKeySpec. key-bytes)))
 
 (defmethod bytes->PrivateKey :aes
@@ -122,7 +130,9 @@
 
   clojure.lang.IPersistentMap
   (->PrivateKey
-    ([{^String key-alias :alias, ^String password :password, :as m}]
+    ([{^String key-alias :alias
+       ^String password :password
+       :as m}]
      (when-let [keystore (keystore m)]
        (when-let [key (.getKey keystore key-alias (.toCharArray password))]
          (assert (instance? java.security.PrivateKey key))
@@ -163,7 +173,9 @@
 
   clojure.lang.IPersistentMap
   (->X509Certificate
-    [{^String key-alias :alias, ^String password :password, :as m}]
+    [{^String key-alias :alias
+      ^String password :password
+      :as m}]
     (when (and key-alias password)
       (when-let [keystore (keystore m)]
         (.getCertificate keystore key-alias)))))
@@ -186,7 +198,9 @@
 
   clojure.lang.IPersistentMap
   (->Credential
-    ([{^String key-alias :alias, ^String password :password, :as m}]
+    ([{^String key-alias :alias
+       ^String password :password
+       :as m}]
      (when (and key-alias password)
        (when-let [keystore (keystore m)]
          (org.opensaml.security.x509.impl.KeyStoreX509CredentialAdapter. keystore key-alias (.toCharArray password)))))
@@ -268,6 +282,46 @@
   (->SAMLObject [this]
     (->SAMLObject (->Element this))))
 
+(extend-protocol CoerceToLogoutResponse
+  nil
+  (->LogoutResponse [_] nil)
+
+  org.opensaml.saml.saml2.core.LogoutResponse
+  (->LogoutResponse [this] this)
+
+  org.opensaml.saml.common.SignableSAMLObject
+  (->LogoutResponse [this]
+    (throw (ex-info (format "Don't know how to coerce a %s to a Response" (.getCanonicalName (class this)))
+                    {:object this})))
+
+  org.opensaml.messaging.context.MessageContext
+  (->LogoutResponse [this]
+    (->LogoutResponse (.getMessage this)))
+
+  clojure.lang.IPersistentMap
+  (->LogoutResponse [this]
+    (let [http-request (reify jakarta.servlet.http.HttpServletRequest
+                         (getMethod [_]
+                           (condp = (:request-method this)
+                             :post "POST" ;; the HTTPPostDecoder only cares about seeing exactly POST in the request
+                             "UNKNOWN"))
+                         (getContentType [_]
+                           (:content-type this))
+                         (getParameter [_ param]
+                           (get-in this [:params (keyword param)])))
+          http-request-supplier (reify net.shibboleth.shared.primitive.NonnullSupplier
+                                  (get [_] http-request))
+          http-decoder (HTTPPostDecoder.)]
+      (doto http-decoder
+        (.setHttpServletRequestSupplier http-request-supplier)
+        (.initialize)
+        (.decode))
+      (->LogoutResponse (.getMessageContext http-decoder))))
+
+  Object
+  (->LogoutResponse [this]
+    (->LogoutResponse (->SAMLObject this))))
+
 (extend-protocol CoerceToResponse
   nil
   (->Response [_] nil)
@@ -310,5 +364,4 @@
 
   org.opensaml.messaging.context.MessageContext
   (->xml-string [this]
-    (->xml-string (XMLObjectSupport/marshall (.getMessage this))))
-  )
+    (->xml-string (XMLObjectSupport/marshall (.getMessage this)))))

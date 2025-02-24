@@ -1,5 +1,7 @@
 (ns saml20-clj.test
-  "Test utils.")
+  "Test utils."
+  (:require
+    [saml20-clj.encode-decode :as encode-decode]))
 
 (def idp-entity-id "idp.example.com")
 (def idp-uri "https://idp.example.com")
@@ -39,6 +41,19 @@
 
 (def metadata-with-key-info (sample-file "metadata-with-keyinfo.xml"))
 (def metadata-without-key-info (sample-file "metadata-without-keyinfo.xml"))
+
+;; Logout Response
+
+(defn ring-logout-response
+  "Return a ring map of the logout response"
+  [status relay-state]
+  (let [response (sample-file (condp = status
+                                :success "logout-response-success-with-signature.xml"
+                                :authnfailed "logout-response-authnfailure-with-signature.xml"))]
+    {:params {:SAMLResponse (encode-decode/str->base64 response)
+              :RelayState (encode-decode/str->base64 relay-state)}
+     :request-method :post
+     :content-type "application/x-www-form-urlencoded"}))
 
 ;;
 ;; Confirmation Data

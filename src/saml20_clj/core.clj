@@ -5,6 +5,7 @@
             [saml20-clj.coerce :as coerce]
             [saml20-clj.crypto :as crypto]
             [saml20-clj.encode-decode :as encode]
+            [saml20-clj.sp.logout-response :as logout-response]
             [saml20-clj.sp.metadata :as metadata]
             [saml20-clj.sp.request :as request]
             [saml20-clj.sp.response :as response]
@@ -18,7 +19,8 @@
   metadata/keep-me
   request/keep-me
   response/keep-me
-  state/keep-me)
+  state/keep-me
+  logout-response/keep-me)
 
 (p/import-vars
  [coerce
@@ -47,6 +49,9 @@
   assertions
   default-validation-options
   validate]
+
+ [logout-response
+  validate-logout]
 
  [state
   record-request!
