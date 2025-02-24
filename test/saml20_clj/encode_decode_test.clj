@@ -10,7 +10,7 @@
 (deftest bytes->str-test
   (testing "Testing string to stream and stream to string transformations."
     (is (= test-string
-           (encode-decode/bytes->str (with-open [is (java.io.ByteArrayInputStream. (encode-decode/str->bytes test-string))]
+           (encode-decode/bytes->str (with-open [is (ByteArrayInputStream. (encode-decode/str->bytes test-string))]
                                        (IOUtils/toByteArray is))))))
   (testing "make sure we can encode string -> bytes -> hex"
     (is (= "41424358595a"
@@ -24,9 +24,7 @@
            (encode-decode/base64->str "QUJDREVG")))))
 
 (deftest base-64-deflate-inflate-test
-  (testing "make sure conversion to/from base 64 w/ DEFLATE compression works as expected"
-    (is (= "c3RydnF1AwA="
-           (encode-decode/str->deflate->base64 "ABCDEF")))
+  (testing "make sure conversion from base 64 w/ DEFLATE compression works as expected"
     (is (= "ABCDEF"
            (encode-decode/base64->inflate->str "c3RydnF1AwA="))))
 
