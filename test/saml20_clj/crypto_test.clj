@@ -1,7 +1,9 @@
 (ns saml20-clj.crypto-test
   (:require [clojure.test :refer :all]
+            [saml20-clj.coerce :as coerce]
             [saml20-clj.crypto :as crypto]
-            [saml20-clj.test :as test]))
+            [saml20-clj.test :as test])
+  (:import org.opensaml.saml.common.messaging.context.SAMLPeerEntityContext))
 
 (deftest assert-signature-invalid-swapped-signature
   (doseq [{:keys [response], :as response-map} (test/responses)
@@ -24,3 +26,16 @@
       (is (= false (crypto/has-private-key? {:filename test/keystore-filename
                                              :password test/keystore-password
                                              :alias    "idp"}))))))
+
+(deftest handle-signature-security-test
+  (testing "with signed LogoutResponse"
+    (let [request (test/ring-logout-response :success "relay-state" :signature true)
+          msg-ctx (coerce/ring-request->MessageContext request)]
+      (crypto/handle-signature-security msg-ctx request "http://idp.example.com/metadata.php" test/idp-cert)
+      (is (.isAuthenticated (.getSubcontext msg-ctx SAMLPeerEntityContext)))))
+
+  (testing "with unsigned LogoutResponse"
+    (let [request (test/ring-logout-response :success "relay-state" :signature false)
+          msg-ctx (coerce/ring-request->MessageContext request)]
+      (crypto/handle-signature-security msg-ctx request "http://idp.example.com/metadata.php" test/idp-cert)
+      (is (not (.isAuthenticated (.getSubcontext msg-ctx SAMLPeerEntityContext)))))))

@@ -4,7 +4,8 @@
             [saml20-clj.encode-decode :as encode-decode]
             [saml20-clj.xml :as saml.xml])
   (:import org.opensaml.core.xml.util.XMLObjectSupport
-           org.opensaml.saml.saml2.binding.decoding.impl.HTTPPostDecoder))
+           org.opensaml.saml.common.binding.impl.BaseSAMLHttpServletRequestDecoder
+           [org.opensaml.saml.saml2.binding.decoding.impl HTTPPostDecoder HTTPRedirectDeflateDecoder]))
 
 ;; these have to be initialized before using.
 ;;
@@ -94,6 +95,37 @@ for encrypting requests (in combination with IdP credentials) or
                                     0
                                     (count key-bytes)
                                     "AES"))
+
+(defn ring-request->HttpServletRequestSupplier
+  ^jakarta.servlet.http.HttpServletRequest [request]
+  (let [http-request
+        (reify jakarta.servlet.http.HttpServletRequest
+          (getMethod [_]
+            (condp = (:request-method request)
+              :post "POST" ;; the HTTPPostDecoder only cares about seeing exactly POST in the request
+              :get "GET" ;; the HTTPRedirectDeflateDecode only cares about seeing exactly GET in the request
+              "UNKNOWN"))
+          (getContentType [_]
+            (:content-type request))
+          (getQueryString [_]
+            (:query-string request))
+          (getParameter [_ param]
+            (or  (get-in request [:params (keyword param)])
+                 (get-in request [:params param]))))]
+    (reify net.shibboleth.shared.primitive.NonnullSupplier
+      (get [_] http-request))))
+
+(defn ring-request->MessageContext
+  ^org.opensaml.messaging.context.MessageContext [request]
+  (let [http-request-supplier (ring-request->HttpServletRequestSupplier request)
+        ^BaseSAMLHttpServletRequestDecoder http-decoder (if (= (:request-method request) :post)
+                                                          (HTTPPostDecoder.)
+                                                          (HTTPRedirectDeflateDecoder.))]
+    (doto http-decoder
+      (.setHttpServletRequestSupplier http-request-supplier)
+      (.initialize)
+      (.decode))
+    (.getMessageContext http-decoder)))
 
 ;; I don't think we can use the "class name" of a byte array in `extend-protocol`
 (extend (Class/forName "[B")
@@ -300,23 +332,7 @@ for encrypting requests (in combination with IdP credentials) or
 
   clojure.lang.IPersistentMap
   (->LogoutResponse [this]
-    (let [http-request (reify jakarta.servlet.http.HttpServletRequest
-                         (getMethod [_]
-                           (condp = (:request-method this)
-                             :post "POST" ;; the HTTPPostDecoder only cares about seeing exactly POST in the request
-                             "UNKNOWN"))
-                         (getContentType [_]
-                           (:content-type this))
-                         (getParameter [_ param]
-                           (get-in this [:params (keyword param)])))
-          http-request-supplier (reify net.shibboleth.shared.primitive.NonnullSupplier
-                                  (get [_] http-request))
-          http-decoder (HTTPPostDecoder.)]
-      (doto http-decoder
-        (.setHttpServletRequestSupplier http-request-supplier)
-        (.initialize)
-        (.decode))
-      (->LogoutResponse (.getMessageContext http-decoder))))
+    (->LogoutResponse (ring-request->MessageContext this)))
 
   Object
   (->LogoutResponse [this]
