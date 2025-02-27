@@ -40,7 +40,6 @@
 
  [request
   idp-redirect-response
-  request
   logout-redirect-location
   idp-logout-redirect-response]
 
@@ -48,7 +47,7 @@
   decrypt-response
   assertions
   default-validation-options
-  validate]
+  validate-response]
 
  [logout-response
   validate-logout]

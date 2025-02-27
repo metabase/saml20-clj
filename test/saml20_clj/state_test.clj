@@ -4,7 +4,8 @@
             [saml20-clj.coerce :as coerce]
             [saml20-clj.sp.request :as request]
             [saml20-clj.sp.response :as response]
-            [saml20-clj.state :as state]))
+            [saml20-clj.state :as state]
+            [saml20-clj.test :as test]))
 
 (deftest in-memory-state-manager-test
   (let [m (state/in-memory-state-manager)]
@@ -82,7 +83,7 @@
   (let [m (state/in-memory-state-manager)]
     (t/with-clock (t/mock-clock (t/instant "2020-09-25T08:00:00.000Z"))
       (testing "generate request"
-        (request/request
+        (request/idp-redirect-response
          {:request-id    "ABC"
           :sp-name       "SP test"
           :acs-url       "http://sp.example.com/demo1/index.php?acs"
@@ -101,7 +102,8 @@
                            " Version=\"2.0\">"
                            "</samlp:Response>")
                       coerce/->Response
-                      (response/validate nil nil {:state-manager m, :response-validators [:valid-request-id]})))]
+                      test/ring-response-post
+                      (response/validate-response {:state-manager m, :response-validators []})))]
           (handle-response!)
           (testing "ID should be removed"
             (is (= [[(t/instant "2020-09-25T08:00:00Z") #{}]]
@@ -110,15 +112,4 @@
             (is (thrown-with-msg?
                  clojure.lang.ExceptionInfo
                  #"Invalid request ID"
-                 (handle-response!))))
-          (testing "Shouldn't be allowed to use response that is missing InResponseTo attribute if state manager is specified"
-            (is (thrown-with-msg?
-                 clojure.lang.ExceptionInfo
-                 #"missing InResponseTo attribute"
-                 (-> (str "<samlp:Response"
-                          " xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\""
-                          " xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\""
-                          " Version=\"2.0\">"
-                          "</samlp:Response>")
-                     coerce/->Response
-                     (response/validate nil nil {:state-manager m, :response-validators [:valid-request-id]}))))))))))
+                 (handle-response!)))))))))

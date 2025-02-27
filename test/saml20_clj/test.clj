@@ -1,7 +1,9 @@
-(ns saml20-clj.test
+ (ns saml20-clj.test
   "Test utils."
-  (:require
-   [saml20-clj.encode-decode :as encode-decode]))
+  (:require [clojure.string :as str]
+            ring.util.codec
+            [saml20-clj.coerce :as coerce]
+            [saml20-clj.encode-decode :as encode-decode]))
 
 (def idp-entity-id "idp.example.com")
 (def idp-uri "https://idp.example.com")
@@ -47,8 +49,8 @@
 (def logout-issuer-id "http://idp.example.com/metadata.php")
 (def logout-request-id "ONELOGIN_21df91a89767879fc0f7df6a1490c6000c81644d")
 
-(defn ring-logout-response
-  "Return a ring map of the logout response"
+(defn ring-logout-response-post
+  "Return a ring map of the logout response as an HTTP-Post binding."
   [status relay-state & {:keys [signature] :or {signature true}}]
   (let [response (sample-file (condp = [status signature]
                                 [:success true] "logout-response-success-with-signature.xml"
@@ -60,9 +62,35 @@
      :request-method :post
      :content-type "application/x-www-form-urlencoded"}))
 
+(defn ring-logout-response-get
+  "Return a ring map of the logout response as an HTTP-Redirect binding."
+  [status & {:keys [signature] :or {signature true}}]
+  (let [response (-> (condp = [status signature]
+                       [:success true] "logout-response-success-with-signature.edn"
+                       [:success :bad] "logout-response-success-with-bad-signature.edn"
+                       [:authnfailed true] "logout-response-authnfailure-with-signature.edn"
+                       [:success false] "logout-response-success-without-signature.edn")
+                     sample-file
+                     read-string)]
+    {:query-string (->> (zipmap (->> response keys (map name))
+                                (vals response))
+                        (map (partial str/join "="))
+                        (str/join "&"))
+     :params (zipmap (->> response keys (map name))
+                     (->> response vals (map ring.util.codec/url-decode)))
+     :request-method :get}))
+
 ;;
 ;; Confirmation Data
 ;;
+
+(defn ring-response-post
+  "Return a ring map of a response as an HTTP-Post binding"
+  [response & [relay-state]]
+  {:params {:SAMLResponse (encode-decode/str->base64 (coerce/->xml-string response))
+            :RelayState (encode-decode/str->base64 (or relay-state "test-relay-state"))}
+   :request-method :post
+   :content-type "application/x-www-form-urlencoded"})
 
 (defmethod response {:invalid-confirmation-data? true}
   [_]
@@ -136,8 +164,8 @@
   (or (= {:assertion-signed? true :assertion-encrypted? true} (dissoc response-map :response))
       ((some-fn :saml2-assertion? :no-namespace-assertion?) response-map)))
 
-(defn signed? [response-map]
-  ((some-fn :message-signed? :assertion-signed?) response-map))
+(defn message-signed? [response-map]
+  ((some-fn :message-signed?) response-map))
 
 (defn assertions-encrypted? [response-map]
   ((some-fn :assertion-encrypted?) response-map))
