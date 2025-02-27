@@ -9,6 +9,12 @@
            [org.opensaml.saml.saml2.core LogoutResponse RequestAbstractType StatusCode StatusResponseType]
            org.opensaml.saml.saml2.core.impl.LogoutRequestBuilder))
 
+(defn ->JavaFunction
+  [func]
+  (reify java.util.function.Function
+    (apply [_ arg]
+      (func arg))))
+
 (defmulti validate-message
   "Peform a validation operation on a MessageCtx."
   (fn [validation _ _]
@@ -31,8 +37,8 @@
         incoming-issuer (.. msg getIssuer getValue)]
     (try
       (doto (CheckExpectedIssuer.)
-        (.setExpectedIssuerLookupStrategy (constantly issuer))
-        (.setIssuerLookupStrategy (constantly incoming-issuer))
+        (.setExpectedIssuerLookupStrategy (->JavaFunction (constantly issuer)))
+        (.setIssuerLookupStrategy (->JavaFunction (constantly incoming-issuer)))
         (.initialize)
         (.invoke msg-ctx))
       (catch org.opensaml.messaging.handler.MessageHandlerException e
