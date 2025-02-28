@@ -50,6 +50,7 @@
   validate-response]
 
  [logout-response
+  logout-success?
   validate-logout]
 
  [state

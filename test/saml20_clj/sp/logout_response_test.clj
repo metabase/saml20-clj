@@ -64,8 +64,8 @@
   (t/testing "when the logout-response is successful"
     (let [response (-> (test/ring-logout-response-post :success "relay-state")
                        (sut/validate-logout test/logout-request-id test/logout-issuer-id test/idp-cert))]
-      (t/is (sut/success? response))))
+      (t/is (sut/logout-success? response))))
   (t/testing "when the logout-response is not successful"
     (let [response (-> (test/ring-logout-response-post :authnfailed "relay-state")
                        (sut/validate-logout test/logout-request-id test/logout-issuer-id test/idp-cert))]
-      (t/is (not (sut/success? response))))))
+      (t/is (not (sut/logout-success? response))))))

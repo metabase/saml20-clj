@@ -5,7 +5,7 @@
   (:import [org.opensaml.saml.saml2.core LogoutResponse StatusCode]
            org.opensaml.saml.saml2.core.impl.LogoutRequestBuilder))
 
-(defn success?
+(defn logout-success?
   [^LogoutResponse response]
   (let [status-value (.. response getStatus getStatusCode getValue)]
     (= status-value StatusCode/SUCCESS)))
