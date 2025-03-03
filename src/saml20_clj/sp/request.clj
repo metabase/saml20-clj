@@ -13,6 +13,8 @@
            org.opensaml.xmlsec.context.SecurityParametersContext
            org.opensaml.xmlsec.SignatureSigningParameters))
 
+(set! *warn-on-reflection* true)
+
 (defn- non-blank-string? [s]
   (and (string? s)
        (not (str/blank? s))))
