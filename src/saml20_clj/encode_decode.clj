@@ -1,8 +1,8 @@
 (ns saml20-clj.encode-decode
   "Utility functions for encoding/decoding and compressing byte arrays and strings."
   (:require [clojure.string :as str])
-  (:import [java.io ByteArrayInputStream ByteArrayOutputStream]
-           [java.util.zip Deflater DeflaterOutputStream Inflater InflaterInputStream]
+  (:import java.io.ByteArrayInputStream
+           [java.util.zip Inflater InflaterInputStream]
            [org.apache.commons.codec.binary Base64 Hex]
            org.apache.commons.io.IOUtils))
 
@@ -36,14 +36,6 @@
   (when s
     (decode-base64 (str->bytes (strip-ascii-armor s)))))
 
-(defn byte-deflate
-  ^bytes [^bytes str-bytes]
-  (with-open [byte-os     (ByteArrayOutputStream.)
-              deflater-os (DeflaterOutputStream. byte-os (Deflater. -1 true) 1024)]
-    (.write deflater-os str-bytes)
-    (.finish deflater-os)
-    (.toByteArray byte-os)))
-
 (defn byte-inflate
   ^bytes [^bytes comp-bytes]
   (with-open [is (InflaterInputStream. (ByteArrayInputStream. comp-bytes) (Inflater. true) 1024)]
@@ -52,10 +44,6 @@
 (defn str->base64
   ^String [^String string]
   (-> string str->bytes encode-base64 bytes->str))
-
-(defn str->deflate->base64
-  ^String [^String string]
-  (-> string str->bytes byte-deflate encode-base64 bytes->str))
 
 (defn base64->str
   ^String [^String string]

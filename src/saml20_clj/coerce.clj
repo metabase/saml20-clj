@@ -1,8 +1,6 @@
 (ns saml20-clj.coerce
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
-            [hiccup.core :as hiccup]
-            [hiccup.page :as h.page]
             [saml20-clj.encode-decode :as encode-decode]
             [saml20-clj.xml :as saml.xml])
   (:import org.opensaml.core.xml.util.XMLObjectSupport))
@@ -292,12 +290,6 @@
 
   String
   (->xml-string [this] this)
-
-  clojure.lang.IPersistentVector
-  (->xml-string [this]
-    (str
-     (h.page/xml-declaration "UTF-8")
-     (hiccup/html this)))
 
   org.w3c.dom.Node
   (->xml-string [this]

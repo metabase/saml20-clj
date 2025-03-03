@@ -35,6 +35,11 @@
                    :when v]
                [k true]))))
 
+;; Metadata tests
+
+(def metadata-with-key-info (sample-file "metadata-with-keyinfo.xml"))
+(def metadata-without-key-info (sample-file "metadata-without-keyinfo.xml"))
+
 ;;
 ;; Confirmation Data
 ;;

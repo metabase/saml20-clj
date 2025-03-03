@@ -1,42 +1,61 @@
 (ns saml20-clj.sp.metadata
   (:require [clojure.string :as str]
-            [saml20-clj.coerce :as coerce]
-            [saml20-clj.encode-decode :as encode]))
+            [saml20-clj.coerce :as coerce])
+  (:import org.opensaml.core.xml.util.XMLObjectSupport
+           org.opensaml.saml.common.xml.SAMLConstants
+           org.opensaml.saml.saml2.core.NameIDType
+           [org.opensaml.saml.saml2.metadata.impl AssertionConsumerServiceBuilder EntityDescriptorBuilder KeyDescriptorBuilder NameIDFormatBuilder SingleLogoutServiceBuilder SPSSODescriptorBuilder]
+           org.opensaml.security.credential.UsageType
+           org.opensaml.xmlsec.keyinfo.impl.X509KeyInfoGeneratorFactory))
+
+(def ^:private name-id-formats
+  [NameIDType/EMAIL NameIDType/TRANSIENT NameIDType/PERSISTENT NameIDType/UNSPECIFIED NameIDType/X509_SUBJECT])
+
+(def ^:private cert-uses
+  [UsageType/SIGNING UsageType/ENCRYPTION])
 
 (defn metadata [{:keys [app-name acs-url slo-url sp-cert
-                        requests-signed
-                        want-assertions-signed]
+                        ^Boolean requests-signed
+                        ^Boolean want-assertions-signed]
                  :or {want-assertions-signed true
                       requests-signed true}}]
-  (let [encoded-cert (some-> ^java.security.cert.X509Certificate sp-cert
-                             .getEncoded
-                             encode/encode-base64
-                             encode/bytes->str)]
-    (coerce/->xml-string
-     [:md:EntityDescriptor {:xmlns:md "urn:oasis:names:tc:SAML:2.0:metadata"
-                            :ID       (str/replace acs-url #"[:/]" "_")
-                            :entityID app-name}
-      [:md:SPSSODescriptor {:AuthnRequestsSigned        (str requests-signed)
-                            :WantAssertionsSigned       (str want-assertions-signed)
-                            :protocolSupportEnumeration "urn:oasis:names:tc:SAML:2.0:protocol"}
-       (when encoded-cert
-         [:md:KeyDescriptor  {:use "signing"}
-          [:ds:KeyInfo  {:xmlns:ds "http://www.w3.org/2000/09/xmldsig#"}
-           [:ds:X509Data
-            [:ds:X509Certificate encoded-cert]]]])
-       (when encoded-cert
-         [:md:KeyDescriptor  {:use "encryption"}
-          [:ds:KeyInfo  {:xmlns:ds "http://www.w3.org/2000/09/xmldsig#"}
-           [:ds:X509Data
-            [:ds:X509Certificate encoded-cert]]]])
-       (when slo-url
-         [:md:SingleLogoutService {:Binding "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" :Location slo-url}])
-       [:md:NameIDFormat "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"]
-       [:md:NameIDFormat "urn:oasis:names:tc:SAML:2.0:nameid-format:transient"]
-       [:md:NameIDFormat "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent"]
-       [:md:NameIDFormat "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified"]
-       [:md:NameIDFormat "urn:oasis:names:tc:SAML:1.1:nameid-format:X509SubjectName"]
-       [:md:AssertionConsumerService {:Binding   "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
-                                      :Location  acs-url
-                                      :index     "0"
-                                      :isDefault "true"}]]])))
+  (let [entity-descriptor (doto (.buildObject (EntityDescriptorBuilder.))
+                            (.setID (str/replace acs-url #"[:/]" "_"))
+                            (.setEntityID app-name))
+        sp-sso-descriptor (doto (.buildObject (SPSSODescriptorBuilder.))
+                            (.setAuthnRequestsSigned requests-signed)
+                            (.setWantAssertionsSigned want-assertions-signed)
+                            (.addSupportedProtocol SAMLConstants/SAML20P_NS))]
+
+    (.. sp-sso-descriptor
+        (getAssertionConsumerServices)
+        (add (doto (.buildObject (AssertionConsumerServiceBuilder.))
+               (.setIndex (Integer. 0))
+               (.setIsDefault true)
+               (.setLocation acs-url)
+               (.setBinding SAMLConstants/SAML2_POST_BINDING_URI))))
+    (doseq [name-id-format name-id-formats]
+      (.. sp-sso-descriptor
+          (getNameIDFormats)
+          (add (doto (.buildObject (NameIDFormatBuilder.))
+                 (.setURI name-id-format)))))
+    (when sp-cert
+      (let [key-info-generator (.newInstance (doto (X509KeyInfoGeneratorFactory.)
+                                               (.setEmitEntityCertificate true)))]
+        (doseq [cert-use cert-uses]
+          (.. sp-sso-descriptor
+              (getKeyDescriptors)
+              (add (doto (.buildObject (KeyDescriptorBuilder.))
+                     (.setUse cert-use)
+                     (.setKeyInfo (.generate key-info-generator sp-cert))))))))
+    (when slo-url
+      (.. sp-sso-descriptor
+          (getSingleLogoutServices)
+          (add (doto (.buildObject (SingleLogoutServiceBuilder.))
+                 (.setBinding SAMLConstants/SAML2_POST_BINDING_URI)
+                 (.setLocation slo-url)))))
+
+    (.. entity-descriptor
+        (getRoleDescriptors)
+        (add sp-sso-descriptor))
+    (coerce/->xml-string (XMLObjectSupport/marshall entity-descriptor))))
