@@ -44,28 +44,12 @@
               :when (instance? org.w3c.dom.Element child)]
         (recursive-decrypt! sp-private-key child)))))
 
-(defn ^:private secure-random-bytes
-  (^bytes [size]
-   (let [ba (byte-array size)
-         r  (java.security.SecureRandom.)]
-     (.nextBytes r ba)
-     ba))
-  (^bytes []
-   (secure-random-bytes 20)))
-
-(defn new-secret-key ^javax.crypto.spec.SecretKeySpec []
-  (javax.crypto.spec.SecretKeySpec. (secure-random-bytes) "HmacSHA1"))
-
 (defonce ^:private -init
   (delay
     (Init/init)
     nil))
 
 @-init
-
-(defn signed? [object]
-  (when-let [object (coerce/->SAMLObject object)]
-    (.isSigned object)))
 
 (defn authenticated?
   "True if the MessageContext's PeerEntity subcontext has isAuthenticated set"

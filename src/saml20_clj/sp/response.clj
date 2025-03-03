@@ -4,10 +4,13 @@
   (:require [java-time.api :as t]
             [saml20-clj.coerce :as coerce]
             [saml20-clj.crypto :as crypto]
+            [saml20-clj.sp.message :as message]
             [saml20-clj.state :as state]
             [saml20-clj.xml :as xml])
-  (:import [org.opensaml.saml.saml2.core Assertion Attribute AttributeStatement Audience AudienceRestriction Response
-            Subject SubjectConfirmation SubjectConfirmationData]))
+  (:import org.opensaml.messaging.context.MessageContext
+           [org.opensaml.saml.saml2.core Assertion Attribute AttributeStatement Audience AudienceRestriction Response
+            Subject SubjectConfirmation SubjectConfirmationData]
+           org.opensaml.saml.saml2.core.impl.AuthnRequestBuilder))
 
 (defn clone-response
   "Clone an OpenSAML `response` object."
@@ -27,9 +30,9 @@
         (crypto/recursive-decrypt! sp-private-key element)
         (coerce/->Response element)))))
 
-(defn ensure-encrypted-assertions
-  ^Response [response]
-  (when-let [response (coerce/->Response response)]
+(defmethod message/validate-message :require-encryption
+  [_ ^MessageContext msg-ctx _]
+  (when-let [response (coerce/->Response msg-ctx)]
     (let [num-assertions           (count (.getAssertions response))
           num-encrypted-assertions (count (.getEncryptedAssertions response))]
       (when (> num-assertions num-encrypted-assertions)
@@ -40,50 +43,6 @@
   (when-let [response (coerce/->Response response)]
     (assert (empty? (.getEncryptedAssertions response)) "Response is still encrypted")
     (not-empty (.getAssertions response))))
-
-(defmulti validate-response
-  "Perform a validation operation on a Response."
-  {:arglists '([validation possibly-encrypted-response unencryped-response options])}
-  (fn [validation _ _ _]
-    (keyword validation)))
-
-(defmethod validate-response :signature
-  [_ encrypted-response _ {:keys [idp-cert]}]
-  (try
-    (crypto/assert-signature-valid-when-present encrypted-response idp-cert)
-    (catch Throwable e
-      (throw (ex-info "Invalid <Response> signature" {} e)))))
-
-(defmethod validate-response :require-signature
-  [_ encrypted-response decrypted-response _]
-  (when-not (crypto/signed? encrypted-response)
-    (let [assertions (opensaml-assertions decrypted-response)]
-      (assert (seq assertions) "Unsigned response has no assertions (no signatures can be verified)")
-      (assert (every? crypto/signed? assertions) "Neither response nor assertion(s) are signed"))))
-
-(defmethod validate-response :valid-request-id
-  [_ _ ^Response decrypted-response {:keys [state-manager]}]
-  (when state-manager
-    (let [request-id (.getInResponseTo decrypted-response)]
-      (when-not request-id
-        (throw (ex-info "<Response> is missing InResponseTo attribute" {})))
-      (state/accept-response! state-manager request-id))))
-
-;; for the <Response> element:
-;;
-;; The <Issuer> element MAY be omitted, but if present it MUST contain the unique identifier of the issuing identity
-;; provider
-;;
-;;
-;; If the <Response> has an <Issuer> element *and* the `:issuer` option is passed, make sure the value of <Issuer>
-;; matches `issuer`.
-(defmethod validate-response :issuer
-  [_ _ ^Response decrypted-response {:keys [issuer]}]
-  (when issuer
-    (assert (string? issuer) "Expected :issuer to be a String")
-    (when-let [response-issuer (some-> (.getIssuer decrypted-response) .getValue)]
-      (when-not (= issuer response-issuer)
-        (throw (ex-info "Incorrect Response <Issuer>" {}))))))
 
 ;;
 ;; Subject Confirmation Data Checks
@@ -219,9 +178,9 @@
 
 (def default-validation-options
   {:response-validators  [:signature
-                          :require-signature
-                          :valid-request-id
-                          :issuer]
+                          :issuer
+                          :in-response-to
+                          :require-authenticated]
    :assertion-validators [:signature
                           :recipient
                           :not-on-or-after
@@ -230,18 +189,7 @@
                           :address
                           :issuer]})
 
-(defn- move-validator-config
-  "Raises one of the validation settings from a nested map up into the main config. Because we dispatch on the validator
-  keywords, but only after decrypting the response, we use this to preserve the config setting without having to
-  implement a dummy method"
-  [options validator-type validator]
-  (if (some #(= validator %) (get options validator-type))
-    (-> options
-        (update validator-type (fn [e] (remove #(= % validator) e)))
-        (assoc validator true))
-    options))
-
-(defn validate
+(defn validate-response
   "Validate response. Returns decrypted response if valid. Options:
 
   * `:response-validators` - optional. The validators to run against the `<Response>` itself. Validators are
@@ -272,36 +220,37 @@
   * `:allowable-clock-skew-seconds` - optional. By default, 3 minutes. The amount of leeway to use when validating
     `NotOnOrAfter` and `NotBefore` attributes."
   {:arglists '([response idp-cert sp-private-key]
-               [response idp-cert sp-private-key {:keys [response-validators
-                                                         assertion-validators
-                                                         acs-url
-                                                         request-id
-                                                         state-manager
-                                                         user-agent-address
-                                                         issuer
-                                                         solicited?
-                                                         allowable-clock-skew-seconds]}])}
-  ([response idp-cert sp-private-key]
-   (validate response idp-cert sp-private-key nil))
+               [response {:keys [response-validators
+                                 assertion-validators
+                                 acs-url
+                                 request-id
+                                 state-manager
+                                 user-agent-address
+                                 issuer
+                                 solicited?
+                                 allowable-clock-skew-seconds]}])}
+  (^Response [req idp-cert sp-private-key]
+   (validate-response req {:idp-cert idp-cert
+                           :sp-private-key sp-private-key}))
 
-  ([response idp-cert sp-private-key options]
-   (let [options                                            (-> (merge default-validation-options options)
-                                                                (assoc :idp-cert (coerce/->Credential idp-cert))
-                                                                (move-validator-config :assertion-validators :require-encryption))
-         {:keys [response-validators assertion-validators]} options]
-     (when (:require-encryption options)
-       (ensure-encrypted-assertions response))
-     (when-let [response (coerce/->Response response)]
-       (let [decrypted-response (if sp-private-key
-                                  (decrypt-response response sp-private-key)
-                                  response)]
-         (doseq [validator response-validators]
-           (validate-response validator response decrypted-response options))
+  (^Response [req options]
+   (let [options                      (-> (merge default-validation-options options)
+                                          (assoc :request req :request-builder (AuthnRequestBuilder.)))
+         {:keys [response-validators
+                 assertion-validators
+                 sp-private-key]}     options]
+     (when-let [msg-ctx (coerce/ring-request->MessageContext req)]
+       (doseq [validator response-validators]
+         (message/validate-message validator msg-ctx options))
+       (let [decrypted-response (cond-> (coerce/->Response msg-ctx)
+                                  sp-private-key (decrypt-response sp-private-key))]
          (doseq [assertion (opensaml-assertions decrypted-response)
                  validator assertion-validators]
            (validate-assertion validator assertion options))
+         ;; TODO: repalce this with usage of opensaml's client storage system
+         (when-let [state-manager (:state-manager options)]
+           (state/accept-response! state-manager (.getInResponseTo decrypted-response)))
          decrypted-response)))))
-
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                        Convenient Clojurey Map Util Fns                                        |

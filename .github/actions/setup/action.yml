@@ -26,6 +26,3 @@ runs:
           ~/.m2
           ~/.gitlibs
         key: v1-${{ hashFiles('deps.edn') }}-${{ inputs.cache-key }}
-        restore-keys: |
-          v1-${{ hashFiles('deps.edn') }}-
-          v1-

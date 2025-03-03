@@ -16,17 +16,7 @@ v4](https://wiki.shibboleth.net/confluence/display/OS30/Home) and some utility f
 library](https://github.com/onelogin/java-saml) This library allows a Clojure application to act as a Service Provider
 (SP).
 
-### Important note!
-
-The underlying Java library, OpenSAML, is no longer available in Maven Central, so you'll have to add the repository
-yourself. `deps.edn` example:
-
-```clj
-{:mvn/repos
- {"opensaml"{:url "https://build.shibboleth.net/nexus/content/repositories/releases/"}}}
- ```
-
-## 2.0.0 Usage
+## 4.0.0 Usage
 
 ### Creating metadata
 
@@ -73,21 +63,20 @@ Basic usage for requests to the IdP looks like:
 ```clj
 (require '[saml20-clj.core :as saml])
 
-;; create a new request
-(-> (saml/request
-     {:sp-name          "My SP Name"
+    ;; create a Ring redirect response to the IDP URL; pass the request as base-64 encoded `SAMLRequest` query parameter
+    (saml/idp-redirect-response
+    {:sp-name          "My SP Name"
       :acs-url          "http://sp.example.com/demo1/index.php?acs"
       :idp-url          "http://idp.example.com/SSOService.php"
       :issuer           "http://sp.example.com/demo1/metadata.php"
       ;; state manager (discussed above) is optional, but if passed `request` will record the newly created request.
       :state-manager    state-manager
       ;; :credential is optional. If passed, sign the request with this key and attach public key data, if present
-      :credential       sp-private-key})
-    ;; create a Ring redirect response to the IDP URL; pass the request as base-64 encoded `SAMLRequest` query parameter
-    (saml/idp-redirect-response ;; This is RelayState. In the old version of the lib it was encrypted. In some cases,
-                                ;; like this it's not really sensitive so it doesn't need to be encrypted. Adding
-                                ;; automatic encryption support back is on the TODO list
-                                "http://sp.example.com/please/redirect/me/to/here"))
+      :credential       sp-private-key}
+      ;; This is RelayState. In the old version of the lib it was encrypted. In some cases,
+      ;; like this it's not really sensitive so it doesn't need to be encrypted. Adding
+      ;; automatic encryption support back is on the TODO list
+      "http://sp.example.com/please/redirect/me/to/here")
 ```
 
 The `:credential` can be used to sign the request to the IdP, and attach any public key information (if present). It will happily accept several formats, depending on the use-case:
@@ -106,23 +95,18 @@ Basic usage for responses from the IdP looks like this (assuming a Ring `request
 (require '[saml20-clj.encode-decode :as saml-decode])
 
 (-> request
-    :params
-    :SAML-response
-    saml-decode/base64->str
-    ;; Coerce the response to an OpenSAML `Response`. This can be anything from a raw XML string to a parsed
-    ;; `org.w3c.dom.Document`
-    saml/->Response
-    ;; decrypt and validate the response. Returns decrypted response
-    (saml/validate idp-cert sp-private-key options)
+    (saml/validate-response idp-cert sp-private-key)
     ;; convert the Assertions to a convenient Clojure map so you can do something with them
     saml/assertions)
 ```
 
-#### `validate` options
+#### `validate-response` options
 
-`validate` accepts an options map that allows you to configure what validations are done, as well as the
+`validate-response` accepts an options map that allows you to configure what validations are done, as well as the
 stateful parameters (if relevent) those validations are verified against. The list of options and their defaults are
 shown below:
+
+If you do not supply required state to the validators (eg. `request-id`, `issuer`) those validations will fail. If you do not plan to handle this state you should remove those validations from the request-valiators or the assertion-validators.
 
 ```clj
 { ;; e.g. "http://sp.example.com/demo1/index.php?acs" The assertion consumer service URL. It is *required*
@@ -185,15 +169,17 @@ shown below:
  ;; IdP certificate. If Response is not signed, this validator does nothing.
  :signature
 
- ;; requires that either the <Response> is signed, *every* <Assertion> is signed.
- :require-signature
+ ;; requires that a message contains an authenticated signature for the message
+ :require-authenticated
 
  ;; If the :issuer option is passed and <Response> has <Issuer> information, checks that these match.
  :issuer
 
- ;; validates the request ID with :state-manager if it is passed as an option. This does not validate that the value
- ;; matches InResponseTo -- that is done by :in-response-to.
- :valid-request-id]
+ ;; Asserts that request-id matches the in-reponse-to
+ :in-response-to
+
+ ;; Asserts that all assertions are encrypted if the message contains assertions
+ :require-encryption]
 ```
 
 #### Default `:assertion-validators`
@@ -202,10 +188,6 @@ shown below:
 [;; If <Assertion> is signed, the signature matches the Assertion and the IdP certificate. If <Assertion> is not
  ;; signed, this validator does nothing.
  :signature
-
- ;; If set, validation will ensure that all Assertions in the response are encrypted. If *any* unencrypted Assertions
- ;; are present, verification will fail
- :require-encryption
 
  ;; If :acs-url is non-nil, and <SubjectConfirmationData> is present, checks that <SubjectConfirmationData> has a
  ;; Recipient attribute matching this value.
@@ -240,11 +222,11 @@ done in the following manner:
 
 ```clj
 (request/idp-logout-redirect-response
-  "Your SP Name"
-  "logmeout@example.com" ;; the user's email
-  "http://sp.example.com/demo1/metadata.php"
-  (encode-decode/str->base64 "http://sp.example.com/demo1/metadata.php"))
-  "my_random_id_42") ;; req-id is optional, and will get created for you.
+   {:issuer     "http://sp.example.com/demo1/metadata.php"
+    :user-email "user@example.com"
+    :idp-url    "http://idp.example.com/SSOService.php"
+    :request-id "ONELOGIN_109707f0030a5d00620c9d9df97f627afe9dcc24"
+    :relay-state (encode-decode/str->base64 "http://sp.example.com/demo1/metadata.php")})
 
 ```
 

@@ -106,8 +106,8 @@
           (getQueryString [_]
             (:query-string request))
           (getParameter [_ param]
-            (or  (get-in request [:params (keyword param)])
-                 (get-in request [:params param]))))]
+            (or (get-in request [:params (keyword param)])
+                (get-in request [:params param]))))]
     (reify net.shibboleth.shared.primitive.NonnullSupplier
       (get [_] http-request))))
 
@@ -324,7 +324,7 @@
 
   org.opensaml.messaging.context.MessageContext
   (->LogoutResponse [this]
-    (->LogoutResponse (.getMessage this)))
+    (->LogoutResponse (.ensureMessage this org.opensaml.saml.saml2.core.LogoutResponse)))
 
   clojure.lang.IPersistentMap
   (->LogoutResponse [this]
@@ -337,6 +337,9 @@
 (extend-protocol CoerceToResponse
   nil
   (->Response [_] nil)
+
+  org.opensaml.messaging.context.MessageContext
+  (->Response [this] (.ensureMessage this org.opensaml.saml.saml2.core.Response))
 
   org.opensaml.saml.saml2.core.Response
   (->Response [this] this)
