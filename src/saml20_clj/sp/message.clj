@@ -2,12 +2,14 @@
   "Common validators for all SAML messages"
   (:require [saml20-clj.crypto :as crypto])
   (:import [org.opensaml.messaging.context InOutOperationContext MessageContext]
+           [org.opensaml.saml.saml2.core RequestAbstractType StatusResponseType]
            org.opensaml.messaging.handler.impl.CheckExpectedIssuer
            org.opensaml.saml.common.AbstractSAMLObjectBuilder
-           org.opensaml.saml.common.binding.security.impl.InResponseToSecurityHandler
-           [org.opensaml.saml.saml2.core RequestAbstractType StatusResponseType]))
+           org.opensaml.saml.common.binding.security.impl.InResponseToSecurityHandler))
 
-(defn ->JavaFunction
+(set! *warn-on-reflection* true)
+
+(defn- ->JavaFunction
   [func]
   (reify java.util.function.Function
     (apply [_ arg]

@@ -3,17 +3,27 @@
   (:require [clojure.string :as str]
             ring.util.codec
             [saml20-clj.coerce :as coerce]
-            [saml20-clj.encode-decode :as encode-decode]))
+            [saml20-clj.encode-decode :as encode-decode])
+  (:import [org.apache.commons.codec.binary Base64]))
 
-(def idp-entity-id "idp.example.com")
-(def idp-uri "https://idp.example.com")
-
-(def sp-entity-id "sp.example.com")
-(def sp-attribute-consume-service-endpoint "http://sp.example.com/demo1/index.php?acs")
+(set! *warn-on-reflection* true)
 
 ;; keystore has SP x.509 cert and private keys under "sp" and IdP X.509 cert under "idp"
 (def keystore-filename "test/saml20_clj/test/keystore.jks")
 (def keystore-password "123456")
+
+(defn- bytes->str
+  ^String [^bytes some-bytes]
+  (when some-bytes
+    (String. some-bytes "UTF-8")))
+
+(defn- encode-base64 ^bytes [^bytes bs]
+  (when bs
+    (Base64/encodeBase64 bs)))
+
+(defn str->base64
+  ^String [^String string]
+  (-> string encode-decode/str->bytes encode-base64 bytes->str))
 
 (defn- sample-file [file-name]
   (slurp (str "test/saml20_clj/test/" file-name)))
@@ -57,8 +67,8 @@
                                 [:success :bad] "logout-response-success-with-bad-signature.xml"
                                 [:authnfailed true] "logout-response-authnfailure-with-signature.xml"
                                 [:success false] "logout-response-success-without-signature.xml"))]
-    {:params {:SAMLResponse (encode-decode/str->base64 response)
-              :RelayState (encode-decode/str->base64 relay-state)}
+    {:params {:SAMLResponse (str->base64 response)
+              :RelayState (str->base64 relay-state)}
      :request-method :post
      :content-type "application/x-www-form-urlencoded"}))
 
@@ -87,8 +97,8 @@
 (defn ring-response-post
   "Return a ring map of a response as an HTTP-Post binding"
   [response & [relay-state]]
-  {:params {:SAMLResponse (encode-decode/str->base64 (coerce/->xml-string response))
-            :RelayState (encode-decode/str->base64 (or relay-state "test-relay-state"))}
+  {:params {:SAMLResponse (str->base64 (coerce/->xml-string response))
+            :RelayState (str->base64 (or relay-state "test-relay-state"))}
    :request-method :post
    :content-type "application/x-www-form-urlencoded"})
 

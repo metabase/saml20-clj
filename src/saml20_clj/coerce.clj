@@ -3,9 +3,11 @@
             [clojure.string :as str]
             [saml20-clj.encode-decode :as encode-decode]
             [saml20-clj.xml :as saml.xml])
-  (:import org.opensaml.core.xml.util.XMLObjectSupport
-           org.opensaml.saml.common.binding.impl.BaseSAMLHttpServletRequestDecoder
-           [org.opensaml.saml.saml2.binding.decoding.impl HTTPPostDecoder HTTPRedirectDeflateDecoder]))
+  (:import [org.opensaml.saml.saml2.binding.decoding.impl HTTPPostDecoder HTTPRedirectDeflateDecoder]
+           org.opensaml.core.xml.util.XMLObjectSupport
+           org.opensaml.saml.common.binding.impl.BaseSAMLHttpServletRequestDecoder))
+
+(set! *warn-on-reflection* true)
 
 ;; these have to be initialized before using.
 ;;
@@ -64,6 +66,7 @@
 ;;; ------------------------------------------------------ Impl ------------------------------------------------------
 
 (defn keystore
+  "Returns the provided keystore or opens a keystore from a file and password."
   ^java.security.KeyStore [{:keys [keystore ^String filename ^String password]}]
   (or keystore
       (when (some-> filename io/as-file .exists)
@@ -93,6 +96,8 @@
                                     "AES"))
 
 (defn ring-request->HttpServletRequestSupplier
+  "Returns a NonnullSupplier<HttpServletRequest> object from a ring request map. Works as a compability shimS
+  with OpenSAML."
   ^jakarta.servlet.http.HttpServletRequest [request]
   (let [http-request
         (reify jakarta.servlet.http.HttpServletRequest
@@ -112,6 +117,7 @@
       (get [_] http-request))))
 
 (defn ring-request->MessageContext
+  "Returns an OpenSAML message context from a ring request map. "
   ^org.opensaml.messaging.context.MessageContext [request]
   (let [http-request-supplier (ring-request->HttpServletRequestSupplier request)
         ^BaseSAMLHttpServletRequestDecoder http-decoder (if (= (:request-method request) :post)

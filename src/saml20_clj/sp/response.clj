@@ -7,12 +7,14 @@
             [saml20-clj.sp.message :as message]
             [saml20-clj.state :as state]
             [saml20-clj.xml :as xml])
-  (:import org.opensaml.messaging.context.MessageContext
-           [org.opensaml.saml.saml2.core Assertion Attribute AttributeStatement Audience AudienceRestriction Response
+  (:import [org.opensaml.saml.saml2.core Assertion Attribute AttributeStatement Audience AudienceRestriction Response
             Subject SubjectConfirmation SubjectConfirmationData]
+           org.opensaml.messaging.context.MessageContext
            org.opensaml.saml.saml2.core.impl.AuthnRequestBuilder))
 
-(defn clone-response
+(set! *warn-on-reflection* true)
+
+(defn- clone-response
   "Clone an OpenSAML `response` object."
   ^Response [^Response response]
   (coerce/->Response (xml/clone-document (.. response getDOM getOwnerDocument))))
@@ -38,7 +40,7 @@
       (when (> num-assertions num-encrypted-assertions)
         (throw (ex-info "Unencrypted assertions present in response body" {}))))))
 
-(defn opensaml-assertions
+(defn- opensaml-assertions
   [response]
   (when-let [response (coerce/->Response response)]
     (assert (empty? (.getEncryptedAssertions response)) "Response is still encrypted")
@@ -48,16 +50,16 @@
 ;; Subject Confirmation Data Checks
 ;;
 
-(defn subject ^Subject [^Assertion assertion]
+(defn- subject ^Subject [^Assertion assertion]
   (some-> assertion .getSubject))
 
-(defn subject-confirmations [^Subject subject]
+(defn- subject-confirmations [^Subject subject]
   (some-> subject .getSubjectConfirmations))
 
-(defn subject-data ^SubjectConfirmationData [^SubjectConfirmation subject-confirmation]
+(defn- subject-data ^SubjectConfirmationData [^SubjectConfirmation subject-confirmation]
   (some-> subject-confirmation .getSubjectConfirmationData))
 
-(defn assertion->subject-confirmation-datas [assertion]
+(defn- assertion->subject-confirmation-datas [assertion]
   (map subject-data (-> assertion subject subject-confirmations)))
 
 (defmacro validate-confirmation-datas
@@ -176,7 +178,7 @@
       (when-not (= issuer assertion-issuer)
         (throw (ex-info "Incorrect Assertion <Issuer>" {}))))))
 
-(def default-validation-options
+(def ^:private default-validation-options
   {:response-validators  [:signature
                           :issuer
                           :in-response-to
@@ -276,26 +278,26 @@
 ;; https://www.purdue.edu/apps/account/docs/Shibboleth/Shibboleth_information.jsp
 ;;  Or
 ;; https://wiki.library.ucsf.edu/display/IAM/EDS+Attributes
-(def saml2-attr->name
-  (let [names {"urn:oid:0.9.2342.19200300.100.1.1" "uid"
-               "urn:oid:0.9.2342.19200300.100.1.3" "mail"
-               "urn:oid:2.16.840.1.113730.3.1.241" "displayName"
-               "urn:oid:2.5.4.3"                   "cn"
-               "urn:oid:2.5.4.4"                   "sn"
-               "urn:oid:2.5.4.12"                  "title"
-               "urn:oid:2.5.4.20"                  "phone"
-               "urn:oid:2.5.4.42"                  "givenName"
-               "urn:oid:2.5.6.8"                   "organizationalRole"
-               "urn:oid:2.16.840.1.113730.3.1.3"   "employeeNumber"
-               "urn:oid:2.16.840.1.113730.3.1.4"   "employeeType"
-               "urn:oid:1.3.6.1.4.1.5923.1.1.1.1"  "eduPersonAffiliation"
-               "urn:oid:1.3.6.1.4.1.5923.1.1.1.2"  "eduPersonNickname"
-               "urn:oid:1.3.6.1.4.1.5923.1.1.1.6"  "eduPersonPrincipalName"
-               "urn:oid:1.3.6.1.4.1.5923.1.1.1.9"  "eduPersonScopedAffiliation"
-               "urn:oid:1.3.6.1.4.1.5923.1.1.1.10" "eduPersonTargetedID"
-               "urn:oid:1.3.6.1.4.1.5923.1.6.1.1"  "eduCourseOffering"}]
-    (fn [attr-oid]
-      (get names attr-oid attr-oid))))
+(def ^:private -saml2-attr->name {"urn:oid:0.9.2342.19200300.100.1.1" "uid"
+                                  "urn:oid:0.9.2342.19200300.100.1.3" "mail"
+                                  "urn:oid:2.16.840.1.113730.3.1.241" "displayName"
+                                  "urn:oid:2.5.4.3"                   "cn"
+                                  "urn:oid:2.5.4.4"                   "sn"
+                                  "urn:oid:2.5.4.12"                  "title"
+                                  "urn:oid:2.5.4.20"                  "phone"
+                                  "urn:oid:2.5.4.42"                  "givenName"
+                                  "urn:oid:2.5.6.8"                   "organizationalRole"
+                                  "urn:oid:2.16.840.1.113730.3.1.3"   "employeeNumber"
+                                  "urn:oid:2.16.840.1.113730.3.1.4"   "employeeType"
+                                  "urn:oid:1.3.6.1.4.1.5923.1.1.1.1"  "eduPersonAffiliation"
+                                  "urn:oid:1.3.6.1.4.1.5923.1.1.1.2"  "eduPersonNickname"
+                                  "urn:oid:1.3.6.1.4.1.5923.1.1.1.6"  "eduPersonPrincipalName"
+                                  "urn:oid:1.3.6.1.4.1.5923.1.1.1.9"  "eduPersonScopedAffiliation"
+                                  "urn:oid:1.3.6.1.4.1.5923.1.1.1.10" "eduPersonTargetedID"
+                                  "urn:oid:1.3.6.1.4.1.5923.1.6.1.1"  "eduCourseOffering"})
+
+(defn- saml2-attr->name [attr-oid]
+  (get -saml2-attr->name attr-oid attr-oid))
 
 ;; http://kevnls.blogspot.gr/2009/07/processing-saml-in-java-using-opensaml.html
 ;; http://stackoverflow.com/questions/9422545/decrypting-encrypted-assertion-using-saml-2-0-in-java-using-opensaml

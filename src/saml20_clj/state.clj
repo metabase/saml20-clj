@@ -2,6 +2,8 @@
   (:require [java-time.api :as t]
             [pretty.core :as pretty]))
 
+(set! *warn-on-reflection* true)
+
 (defprotocol StateManager
   "Protocol for managing state for recording which requests are in flight, so we can determine whether responses
   correspond to valid requests. This library ships with a simple in-memory implementation, but this interface is
@@ -75,7 +77,7 @@
         (throw (ex-info "Invalid request ID" {:request-id request-id})))))
 
 ;; 5 minutes, in case people decide they want to sit around on the IdP page for a bit.
-(def default-request-timeout-seconds 300)
+(def ^:private default-request-timeout-seconds 300)
 
 (defn in-memory-state-manager
   "A simple in-memory state manager, suitable for a single instance. Requests IDs are considered valid for a minimum of
