@@ -1,6 +1,5 @@
 (ns build
   (:require [clojure.java.shell :as sh]
-            [clojure.pprint :as pprint]
             [clojure.string :as str]
             [clojure.tools.build.api :as b]
             [deps-deploy.deps-deploy :as dd]))
@@ -9,16 +8,7 @@
 (def github-url "https://github.com/metabase/saml20-clj/")
 (def lib 'metabase/saml20-clj)
 
-(def major-minor-version (str/trim (slurp "VERSION.txt")))
-
-(defn commit-number []
-  (or (-> (sh/sh "git" "rev-list" "HEAD" "--count")
-          :out
-          str/trim
-          parse-long)
-      "9999-SNAPSHOT"))
-
-(def version (str major-minor-version \. (commit-number)))
+(def version (str/trim (slurp "VERSION.txt")))
 
 (def target    "target")
 (def class-dir "target/classes")
