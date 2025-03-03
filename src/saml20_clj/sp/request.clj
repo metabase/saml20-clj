@@ -13,6 +13,8 @@
            org.opensaml.xmlsec.context.SecurityParametersContext
            org.opensaml.xmlsec.SignatureSigningParameters))
 
+(set! *warn-on-reflection* true)
+
 (defn- non-blank-string? [s]
   (and (string? s)
        (not (str/blank? s))))
@@ -165,8 +167,7 @@
                                     SAMLConstants/SAML20_NS
                                     "NameID"
                                     "saml")
-                  (.setValue user-email))))
-  )
+                  (.setValue user-email)))))
 
 (defn idp-logout-redirect-response
   "Return Ring response for HTTP 302 redirect."
