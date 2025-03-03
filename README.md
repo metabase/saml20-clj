@@ -95,7 +95,7 @@ Basic usage for responses from the IdP looks like this (assuming a Ring `request
 (require '[saml20-clj.encode-decode :as saml-decode])
 
 (-> request
-    (saml/validate idp-cert sp-private-key)
+    (saml/validate-response idp-cert sp-private-key)
     ;; convert the Assertions to a convenient Clojure map so you can do something with them
     saml/assertions)
 ```
