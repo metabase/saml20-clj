@@ -15,6 +15,8 @@
            org.opensaml.xmlsec.context.SecurityParametersContext
            org.opensaml.xmlsec.SignatureSigningParameters))
 
+(set! *warn-on-reflection* true)
+
 (defn- format-instant
   "Converts a date-time to a SAML 2.0 time string."
   [instant]
