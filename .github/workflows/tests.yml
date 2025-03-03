@@ -30,6 +30,17 @@ jobs:
           cache-key: "test"
       - run: clojure -X:dev:test
 
+  Test-Browser-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4.1.7
+      - uses: ./.github/actions/setup
+        with:
+          java-version: 21
+          cache-key: "e2e"
+      - run: docker compose up -d --wait
+      - run: clojure -X:dev:e2e
 
   Cloverage:
     runs-on: ubuntu-latest
