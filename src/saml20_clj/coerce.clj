@@ -1,10 +1,13 @@
 (ns saml20-clj.coerce
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
-            [hiccup.core :as hiccup]
-            [hiccup.page :as h.page]
             [saml20-clj.encode-decode :as encode-decode]
-            [saml20-clj.xml :as saml.xml]))
+            [saml20-clj.xml :as saml.xml])
+  (:import [org.opensaml.saml.saml2.binding.decoding.impl HTTPPostDecoder HTTPRedirectDeflateDecoder]
+           org.opensaml.core.xml.util.XMLObjectSupport
+           org.opensaml.saml.common.binding.impl.BaseSAMLHttpServletRequestDecoder))
+
+(set! *warn-on-reflection* true)
 
 ;; these have to be initialized before using.
 ;;
@@ -27,22 +30,22 @@
     ^java.security.PrivateKey [this]
     ^java.security.PrivateKey [this ^String algorithm]
     "Coerce something such as a base-64-encoded string or byte array to a `PrivateKey`. This isn't used directly by
- OpenSAML -- the key must be passed as part of an OpenSAML `Credential`. See `->Credential`."))
+  OpenSAML -- the key must be passed as part of an OpenSAML `Credential`. See `->Credential`."))
 
 (defprotocol CoerceToX509Certificate
   (->X509Certificate ^java.security.cert.X509Certificate [this]
     "Coerce something such as a base-64-encoded string or byte array to a `java.security.cert.X509Certificate`. This
- class isn't used directly by OpenSAML; instead, certificate must be coerced to an OpenSAML `Credential`. See
+  class isn't used directly by OpenSAML; instead certificate must be coerced to an OpenSAML `Credential`. See
 `->Credential`."))
 
 (defprotocol CoerceToCredential
   (->Credential
     ^org.opensaml.security.credential.Credential [this]
     ^org.opensaml.security.credential.Credential [public-key private-key]
-    "Coerce something such as a byte array or base-64-encoded String to an OpenSAML `Credential`. Typically, you'd use
-  the credential with just the public key for the IdP's credentials, for encrypting requests (in combination with SP
+    "Coerce something such as a byte array or base-64-encoded String to an OpenSAML `Credential`. Typically you'd use
+  the credential with just the public key for the IdP's credentials for encrypting requests (in combination with SP
   credentails) or verifying signature(s) in the response. A credential with both public and private keys would
-  typically contain *your* public and private keys, for encrypting requests (in combination with IdP credentials) or
+  typically contain *your* public and private keys for encrypting requests (in combination with IdP credentials) or
   for decrypting encrypted assertions in the response."))
 
 (defprotocol CoerceToElement
@@ -54,13 +57,16 @@
 (defprotocol CoerceToResponse
   (->Response ^org.opensaml.saml.saml2.core.Response [this]))
 
+(defprotocol CoerceToLogoutResponse
+  (->LogoutResponse ^org.opensaml.saml.saml2.core.LogoutResponse [this]))
+
 (defprotocol SerializeXMLString
   (->xml-string ^String [this]))
-
 
 ;;; ------------------------------------------------------ Impl ------------------------------------------------------
 
 (defn keystore
+  "Returns the provided keystore or opens a keystore from a file and password."
   ^java.security.KeyStore [{:keys [keystore ^String filename ^String password]}]
   (or keystore
       (when (some-> filename io/as-file .exists)
@@ -78,7 +84,8 @@
 
 (defmethod bytes->PrivateKey :default
   [^bytes key-bytes algorithm]
-  (.generatePrivate (java.security.KeyFactory/getInstance (str/upper-case (name algorithm)), "BC")
+  (.generatePrivate (java.security.KeyFactory/getInstance (str/upper-case (name algorithm))
+                                                          "BC")
                     (java.security.spec.PKCS8EncodedKeySpec. key-bytes)))
 
 (defmethod bytes->PrivateKey :aes
@@ -87,6 +94,40 @@
                                     0
                                     (count key-bytes)
                                     "AES"))
+
+(defn ring-request->HttpServletRequestSupplier
+  "Returns a NonnullSupplier<HttpServletRequest> object from a ring request map. Works as a compability shimS
+  with OpenSAML."
+  ^jakarta.servlet.http.HttpServletRequest [request]
+  (let [http-request
+        (reify jakarta.servlet.http.HttpServletRequest
+          (getMethod [_]
+            (condp = (:request-method request)
+              :post "POST" ;; the HTTPPostDecoder only cares about seeing exactly POST in the request
+              :get "GET" ;; the HTTPRedirectDeflateDecode only cares about seeing exactly GET in the request
+              "UNKNOWN"))
+          (getContentType [_]
+            (:content-type request))
+          (getQueryString [_]
+            (:query-string request))
+          (getParameter [_ param]
+            (or (get-in request [:params (keyword param)])
+                (get-in request [:params param]))))]
+    (reify net.shibboleth.shared.primitive.NonnullSupplier
+      (get [_] http-request))))
+
+(defn ring-request->MessageContext
+  "Returns an OpenSAML message context from a ring request map. "
+  ^org.opensaml.messaging.context.MessageContext [request]
+  (let [http-request-supplier (ring-request->HttpServletRequestSupplier request)
+        ^BaseSAMLHttpServletRequestDecoder http-decoder (if (= (:request-method request) :post)
+                                                          (HTTPPostDecoder.)
+                                                          (HTTPRedirectDeflateDecoder.))]
+    (doto http-decoder
+      (.setHttpServletRequestSupplier http-request-supplier)
+      (.initialize)
+      (.decode))
+    (.getMessageContext http-decoder)))
 
 ;; I don't think we can use the "class name" of a byte array in `extend-protocol`
 (extend (Class/forName "[B")
@@ -123,7 +164,9 @@
 
   clojure.lang.IPersistentMap
   (->PrivateKey
-    ([{^String key-alias :alias, ^String password :password, :as m}]
+    ([{^String key-alias :alias
+       ^String password :password
+       :as m}]
      (when-let [keystore (keystore m)]
        (when-let [key (.getKey keystore key-alias (.toCharArray password))]
          (assert (instance? java.security.PrivateKey key))
@@ -164,7 +207,9 @@
 
   clojure.lang.IPersistentMap
   (->X509Certificate
-    [{^String key-alias :alias, ^String password :password, :as m}]
+    [{^String key-alias :alias
+      ^String password :password
+      :as m}]
     (when (and key-alias password)
       (when-let [keystore (keystore m)]
         (.getCertificate keystore key-alias)))))
@@ -187,7 +232,9 @@
 
   clojure.lang.IPersistentMap
   (->Credential
-    ([{^String key-alias :alias, ^String password :password, :as m}]
+    ([{^String key-alias :alias
+       ^String password :password
+       :as m}]
      (when (and key-alias password)
        (when-let [keystore (keystore m)]
          (org.opensaml.security.x509.impl.KeyStoreX509CredentialAdapter. keystore key-alias (.toCharArray password)))))
@@ -269,9 +316,36 @@
   (->SAMLObject [this]
     (->SAMLObject (->Element this))))
 
+(extend-protocol CoerceToLogoutResponse
+  nil
+  (->LogoutResponse [_] nil)
+
+  org.opensaml.saml.saml2.core.LogoutResponse
+  (->LogoutResponse [this] this)
+
+  org.opensaml.saml.common.SignableSAMLObject
+  (->LogoutResponse [this]
+    (throw (ex-info (format "Don't know how to coerce a %s to a Response" (.getCanonicalName (class this)))
+                    {:object this})))
+
+  org.opensaml.messaging.context.MessageContext
+  (->LogoutResponse [this]
+    (->LogoutResponse (.ensureMessage this org.opensaml.saml.saml2.core.LogoutResponse)))
+
+  clojure.lang.IPersistentMap
+  (->LogoutResponse [this]
+    (->LogoutResponse (ring-request->MessageContext this)))
+
+  Object
+  (->LogoutResponse [this]
+    (->LogoutResponse (->SAMLObject this))))
+
 (extend-protocol CoerceToResponse
   nil
   (->Response [_] nil)
+
+  org.opensaml.messaging.context.MessageContext
+  (->Response [this] (.ensureMessage this org.opensaml.saml.saml2.core.Response))
 
   org.opensaml.saml.saml2.core.Response
   (->Response [this] this)
@@ -292,12 +366,6 @@
   String
   (->xml-string [this] this)
 
-  clojure.lang.IPersistentVector
-  (->xml-string [this]
-    (str
-     (h.page/xml-declaration "UTF-8")
-     (hiccup/html this)))
-
   org.w3c.dom.Node
   (->xml-string [this]
     (let [transformer (doto (.. javax.xml.transform.TransformerFactory newInstance newTransformer)
@@ -313,4 +381,8 @@
 
   org.opensaml.core.xml.XMLObject
   (->xml-string [this]
-    (->xml-string (.getDOM this))))
+    (->xml-string (.getDOM this)))
+
+  org.opensaml.messaging.context.MessageContext
+  (->xml-string [this]
+    (->xml-string (XMLObjectSupport/marshall (.getMessage this)))))

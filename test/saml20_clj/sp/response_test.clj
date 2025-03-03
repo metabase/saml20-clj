@@ -63,34 +63,40 @@
 (deftest assert-valid-signatures-test
   (testing "unsigned responses should fail\n"
     (doseq [{:keys [response], :as response-map} (test/responses)
-            :when                                (and (not (test/signed? response-map))
+            :when                                (and (not (test/message-signed? response-map))
                                                       (not (test/malicious-signature? response-map)))]
       (testing (test/describe-response-map response-map)
         (is (thrown-with-msg?
-             java.lang.AssertionError
-             #"Neither response nor assertion\(s\) are signed"
-             (response/validate response test/idp-cert test/sp-private-key {:response-validators  [:signature :require-signature]
-                                                                            :assertion-validators [:signature]}))))))
+             clojure.lang.ExceptionInfo
+             #"Message is not Authenticated"
+             (response/validate-response (test/ring-response-post response)
+                                {:idp-cert test/idp-cert
+                                 :sp-private-key test/sp-private-key
+                                 :response-validators  [:signature :require-authenticated]
+                                 :assertion-validators [:signature]}))))))
   (testing "valid signed responses should pass\n"
     (doseq [{:keys [response], :as response-map} (test/responses)
-            :when                                (test/signed? response-map)]
+            :when                                (test/message-signed? response-map)]
       (testing (test/describe-response-map response-map)
         (testing "\nsignature should be valid when checking against IdP cert"
           (is (instance? Response
-                         (response/validate response test/idp-cert test/sp-private-key {:response-validators  [:signature :require-signature]
-                                                                                        :assertion-validators [:signature]}))))
+                         (response/validate-response (test/ring-response-post response)
+                                            {:idp-cert test/idp-cert
+                                             :sp-private-key test/sp-private-key
+                                             :response-validators  [:signature :require-authenticated]
+                                             :assertion-validators [:signature]}))))
         (testing "\nsignature should be invalid when checking against the wrong cert"
           (is (thrown-with-msg?
                clojure.lang.ExceptionInfo
-               #"Invalid <(?:Response)|(?:Assertion)> signature"
+               #"Message failed to validate signature"
                ;; using SP cert for both instead
-               (response/validate
-                response
-                test/sp-cert
-                {:filename test/keystore-filename
-                 :password test/keystore-password
-                 :alias    "sp"}
-                {:response-validators  [:signature :require-signature]
+               (response/validate-response
+                (test/ring-response-post response)
+                {:idp-cert test/sp-cert
+                 :sp-private-key {:filename test/keystore-filename
+                                  :password test/keystore-password
+                                  :alias    "sp"}
+                 :response-validators  [:signature :require-authenticated]
                  :assertion-validators [:signature]}))))))))
 
 (deftest assert-encrypted-assertions-test
@@ -101,22 +107,21 @@
         (is (thrown-with-msg?
              clojure.lang.ExceptionInfo
              #"Unencrypted assertions present in response body"
-             (response/validate response test/idp-cert test/sp-private-key {:assertion-validators [:require-encryption]})))))
+             (response/validate-response (test/ring-response-post response)
+                                {:idp-cert test/idp-cert
+                                 :sp-private-key test/sp-private-key
+                                 :response-validators [:require-encryption]
+                                 :assertion-validators []})))))
 
     (doseq [{:keys [response], :as response-map} (test/responses)
             :when                                (test/assertions-encrypted? response-map)]
       (testing (test/describe-response-map response-map)
         (is (instance? Response
-                       (response/validate response test/idp-cert test/sp-private-key {:response-validators         []
-                                                                                      :assertion-validators        [:require-encryption]})))))))
-
-(deftest test-move-validator-config-helper
-  (is (= {:foo true :response-validators []}
-         (#'response/move-validator-config {:response-validators [:foo]} :response-validators :foo)))
-  (is (= {:foo true :response-validators [:bar]}
-         (#'response/move-validator-config {:response-validators [:foo :bar]} :response-validators :foo)))
-  (is (= {:response-validators [:bar]}
-         (#'response/move-validator-config {:response-validators [:bar]} :response-validators :foo))))
+                       (response/validate-response (test/ring-response-post response)
+                                          {:idp-cert             test/idp-cert
+                                           :sp-private-key       test/sp-private-key
+                                           :response-validators [:require-encryption]
+                                           :assertion-validators []})))))))
 
 ;;
 ;; Subject Confirmation Data Verifications
@@ -132,16 +137,18 @@
 
 (defn- validate-assertions [validator options]
   (let [response (test/response {:valid-confirmation-data? true})]
-    (response/validate response nil nil (merge {:response-validators  nil
-                                                :assertion-validators [validator]}
-                                               options))
+    (response/validate-response (test/ring-response-post response)
+                       (merge {:response-validators  nil
+                               :assertion-validators [validator]}
+                              options))
     :valid))
 
 (defn- validate-assertions-bad-data [validator options]
   (let [response (test/response {:invalid-confirmation-data? true})]
-    (response/validate response nil nil (merge {:response-validators  nil
-                                                :assertion-validators [validator]}
-                                               options))
+    (response/validate-response (test/ring-response-post response)
+                       (merge {:response-validators  nil
+                               :assertion-validators [validator]}
+                              options))
     :valid))
 
 (deftest validate-assertions-not-on-or-after-test
@@ -230,32 +237,40 @@
 (deftest validate-assertions-response-issuer-test
   (let [normal-response    (test/response {})
         response-no-issuer (test/response {:no-issuer-information? true})]
-    (testing "If response has <Issuer>, it should be validated against `:issuer` (if provided)"
+    (testing "If response has <Issuer>, it should be validated against `:issuer`"
       (letfn [(validate [response issuer]
-                (response/validate response nil nil {:response-validators  [:issuer]
-                                                     :assertion-validators nil
-                                                     :issuer               issuer}))]
+                (response/validate-response (test/ring-response-post response)
+                                   {:response-validators  [:issuer]
+                                    :assertion-validators nil
+                                    :issuer               issuer}))]
         (testing "Correct :issuer should succeed"
           (is (instance? Response (validate normal-response "idp.example.com"))))
-        (testing "If :issuer is not passed, validator should no-op"
-          (is (instance? Response (validate normal-response nil))))
-        (is (thrown-with-msg?
-             AssertionError
-             #"Expected :issuer to be a String"
-             (validate normal-response 123)))
+        (testing "If :issuer is not passed, validator should error"
+          (is (thrown-with-msg?
+               AssertionError
+               #"Assert failed: Must provide issuer identifier for idp"
+               (validate normal-response nil))))
+        (testing "If :issuer is not a string, validator should error"
+          (is (thrown-with-msg?
+               AssertionError
+               #"Assert failed: Must provide issuer identifier for idp"
+               (validate normal-response 123))))
         (testing "Wrong :issuer should fail"
           (is (thrown-with-msg?
                clojure.lang.ExceptionInfo
-               #"Incorrect Response <Issuer>"
+               #"Message failed to validate issuer"
                (validate normal-response "wrong.idp.issuer.com"))))
-        (testing "<Response> should be allowed to have no <Issuer>"
-          (is (instance? Response (validate response-no-issuer "idp.example.com"))))))
-
-    (testing "Assertion <Issuer> should be validated against `:issuer` (if provided)"
+        (testing "<Response> should not be allowed to have no <Issuer>"
+          (is (thrown-with-msg?
+               clojure.lang.ExceptionInfo
+               #"Message failed to validate issuer"
+               (validate response-no-issuer "idp.example.com"))))))
+    (testing "Assertion <Issuer> should be validated against `:issuer`"
       (letfn [(validate [response issuer]
-                (response/validate response nil nil {:response-validators  []
-                                                     :assertion-validators [:issuer]
-                                                     :issuer               issuer}))]
+                (response/validate-response (test/ring-response-post response)
+                                   {:response-validators  []
+                                    :assertion-validators [:issuer]
+                                    :issuer               issuer}))]
         (testing "Correct :issuer should succeed"
           (is (instance? Response (validate normal-response "idp.example.com"))))
         (testing "If :issuer is not passed, validator should no-op"
@@ -275,11 +290,15 @@
                #"Assertion is missing required <Issuer> element"
                (validate response-no-issuer "idp.example.com"))))))
 
-    (testing "Responses with no <Issuer> information should be allowed for now if :issuer is not passed"
-      (is (instance? Response (response/validate response-no-issuer nil nil {:response-validators  [:issuer]
-                                                                             :assertion-validators [:issuer]}))))))
+    (testing "Responses with no <Issuer> information should not be allowed if :issuer is not passed"
+      (is (thrown-with-msg?
+           AssertionError
+           #"Assert failed: Must provide issuer identifier for idp"
+           (response/validate-response (test/ring-response-post response-no-issuer)
+                                                 {:response-validators  [:issuer]
+                                                  :assertion-validators [:issuer]}))))))
 
-(deftest Assertion->map-test
+(deftest assertion-test
   (testing "basic checks on Assertions->map conversions"
     (doseq [{:keys [response], :as response-map} (test/responses)
             :when                                (test/valid-confirmation-data? response-map)]
@@ -294,8 +313,7 @@
                              :not-on-or-after (t/instant "2024-01-18T06:21:48Z"),
                              :address         "192.168.1.1",
                              :recipient       "http://sp.example.com/demo1/index.php?acs"}}
-             (response/Assertion->map
-              (first (response/opensaml-assertions (coerce/->Response response))))))))
+             (first (response/assertions (coerce/->Response response)))))))
   (testing "Attribute Nodes sharing a Name will collect all of their contained Attribute Value Nodes."
     (let [response (test/response {})]
       (is (= {"uid"                  '("test")
@@ -304,5 +322,4 @@
               "eduPersonAffiliation" '("users" "examplerole1")
               ;; this key is from two Attribute nodes with the same Name
               "member_of"            '("test-group1" "test-group2" "test-group3")}
-             (:attrs (response/Assertion->map
-                      (first (response/opensaml-assertions (coerce/->Response response))))))))))
+             (:attrs (first (response/assertions (coerce/->Response response)))))))))

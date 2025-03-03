@@ -1,0 +1,69 @@
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    command: ["start-dev", "--import-realm"]
+    platform: linux/amd64
+    environment:
+      KC_LOG_LEVEL: INFO
+      KC_REALM_NAME: test
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: thismustbethepassword
+    ports:
+      - 8080:8080
+    volumes:
+      - ./keycloak/:/opt/keycloak/data/import/:ro
+  test-server:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM clojure:tools-deps
+        COPY ./ /app
+    platform: linux/amd64
+    command: ["clj", "-M:dev:e2e", "-m", "saml20-clj.e2e.server"]
+    working_dir: /app
+    ports:
+      - 3001:3001
+    volumes:
+      - ./src:/app/src
+      - ./e2e:/app/e2e
+
+  selenium:
+    image: selenium/standalone-chrome:latest
+    platform: linux/amd64
+    ports:
+      - 4444:4444
+      - 7900:7900
+    shm_size: '2gb'
+  healthcheck-keycloak:
+    restart: always
+    image: curlimages/curl:latest
+    entrypoint: ["/bin/sh", "-c", "--", "while true; do sleep 30; done;"]
+    depends_on:
+      - keycloak
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://keycloak:8080/"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+  healthcheck-test-server:
+    restart: always
+    image: curlimages/curl:latest
+    entrypoint: ["/bin/sh", "-c", "--", "while true; do sleep 30; done;"]
+    depends_on:
+      - test-server
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-k", "https://test-server:3001/"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+  healthcheck-selenium:
+    restart: always
+    image: curlimages/curl:latest
+    entrypoint: ["/bin/sh", "-c", "--", "while true; do sleep 30; done;"]
+    depends_on:
+      - selenium
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://selenium:4444/"]
+      interval: 3s
+      timeout: 5s
+      retries: 30

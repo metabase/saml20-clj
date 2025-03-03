@@ -4,7 +4,7 @@
   (:require [potemkin :as p]
             [saml20-clj.coerce :as coerce]
             [saml20-clj.crypto :as crypto]
-            [saml20-clj.encode-decode :as encode]
+            [saml20-clj.sp.logout-response :as logout-response]
             [saml20-clj.sp.metadata :as metadata]
             [saml20-clj.sp.request :as request]
             [saml20-clj.sp.response :as response]
@@ -14,11 +14,11 @@
 (comment
   coerce/keep-me
   crypto/keep-me
-  encode/keep-me
   metadata/keep-me
   request/keep-me
   response/keep-me
-  state/keep-me)
+  state/keep-me
+  logout-response/keep-me)
 
 (p/import-vars
  [coerce
@@ -29,25 +29,22 @@
  [crypto
   has-private-key?]
 
- [encode
-  str->base64
-  base64->str]
-
  [metadata
   metadata]
 
  [request
   idp-redirect-response
-  request
   logout-redirect-location
-  idp-logout-redirect-response
-  make-logout-request-xml]
+  idp-logout-redirect-response]
 
  [response
   decrypt-response
   assertions
-  default-validation-options
-  validate]
+  validate-response]
+
+ [logout-response
+  logout-success?
+  validate-logout]
 
  [state
   record-request!

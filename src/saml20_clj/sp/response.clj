@@ -4,12 +4,17 @@
   (:require [java-time.api :as t]
             [saml20-clj.coerce :as coerce]
             [saml20-clj.crypto :as crypto]
+            [saml20-clj.sp.message :as message]
             [saml20-clj.state :as state]
             [saml20-clj.xml :as xml])
   (:import [org.opensaml.saml.saml2.core Assertion Attribute AttributeStatement Audience AudienceRestriction Response
-            Subject SubjectConfirmation SubjectConfirmationData]))
+            Subject SubjectConfirmation SubjectConfirmationData]
+           org.opensaml.messaging.context.MessageContext
+           org.opensaml.saml.saml2.core.impl.AuthnRequestBuilder))
 
-(defn clone-response
+(set! *warn-on-reflection* true)
+
+(defn- clone-response
   "Clone an OpenSAML `response` object."
   ^Response [^Response response]
   (coerce/->Response (xml/clone-document (.. response getDOM getOwnerDocument))))
@@ -27,78 +32,34 @@
         (crypto/recursive-decrypt! sp-private-key element)
         (coerce/->Response element)))))
 
-(defn ensure-encrypted-assertions
-  ^Response [response]
-  (when-let [response (coerce/->Response response)]
+(defmethod message/validate-message :require-encryption
+  [_ ^MessageContext msg-ctx _]
+  (when-let [response (coerce/->Response msg-ctx)]
     (let [num-assertions           (count (.getAssertions response))
           num-encrypted-assertions (count (.getEncryptedAssertions response))]
       (when (> num-assertions num-encrypted-assertions)
         (throw (ex-info "Unencrypted assertions present in response body" {}))))))
 
-(defn opensaml-assertions
+(defn- opensaml-assertions
   [response]
   (when-let [response (coerce/->Response response)]
     (assert (empty? (.getEncryptedAssertions response)) "Response is still encrypted")
     (not-empty (.getAssertions response))))
 
-(defmulti validate-response
-  "Perform a validation operation on a Response."
-  {:arglists '([validation possibly-encrypted-response unencryped-response options])}
-  (fn [validation _ _ _]
-    (keyword validation)))
-
-(defmethod validate-response :signature
-  [_ encrypted-response _ {:keys [idp-cert]}]
-  (try
-    (crypto/assert-signature-valid-when-present encrypted-response idp-cert)
-    (catch Throwable e
-      (throw (ex-info "Invalid <Response> signature" {} e)))))
-
-(defmethod validate-response :require-signature
-  [_ encrypted-response decrypted-response _]
-  (when-not (crypto/signed? encrypted-response)
-    (let [assertions (opensaml-assertions decrypted-response)]
-      (assert (seq assertions) "Unsigned response has no assertions (no signatures can be verified)")
-      (assert (every? crypto/signed? assertions) "Neither response nor assertion(s) are signed"))))
-
-(defmethod validate-response :valid-request-id
-  [_ _ ^Response decrypted-response {:keys [state-manager]}]
-  (when state-manager
-    (let [request-id (.getInResponseTo decrypted-response)]
-      (when-not request-id
-        (throw (ex-info "<Response> is missing InResponseTo attribute" {})))
-      (state/accept-response! state-manager request-id))))
-
-;; for the <Response> element:
-;;
-;; The <Issuer> element MAY be omitted, but if present it MUST contain the unique identifier of the issuing identity
-;; provider
-;;
-;;
-;; If the <Response> has an <Issuer> element *and* the `:issuer` option is passed, make sure the value of <Issuer>
-;; matches `issuer`.
-(defmethod validate-response :issuer
-  [_ _ ^Response decrypted-response {:keys [issuer]}]
-  (when issuer
-    (assert (string? issuer) "Expected :issuer to be a String")
-    (when-let [response-issuer (some-> (.getIssuer decrypted-response) .getValue)]
-      (when-not (= issuer response-issuer)
-        (throw (ex-info "Incorrect Response <Issuer>" {}))))))
-
 ;;
 ;; Subject Confirmation Data Checks
 ;;
 
-(defn subject ^Subject [^Assertion assertion]
+(defn- subject ^Subject [^Assertion assertion]
   (some-> assertion .getSubject))
 
-(defn subject-confirmations [^Subject subject]
+(defn- subject-confirmations [^Subject subject]
   (some-> subject .getSubjectConfirmations))
 
-(defn subject-data ^SubjectConfirmationData [^SubjectConfirmation subject-confirmation]
+(defn- subject-data ^SubjectConfirmationData [^SubjectConfirmation subject-confirmation]
   (some-> subject-confirmation .getSubjectConfirmationData))
 
-(defn assertion->subject-confirmation-datas [assertion]
+(defn- assertion->subject-confirmation-datas [assertion]
   (map subject-data (-> assertion subject subject-confirmations)))
 
 (defmacro validate-confirmation-datas
@@ -217,11 +178,11 @@
       (when-not (= issuer assertion-issuer)
         (throw (ex-info "Incorrect Assertion <Issuer>" {}))))))
 
-(def default-validation-options
+(def ^:private default-validation-options
   {:response-validators  [:signature
-                          :require-signature
-                          :valid-request-id
-                          :issuer]
+                          :issuer
+                          :in-response-to
+                          :require-authenticated]
    :assertion-validators [:signature
                           :recipient
                           :not-on-or-after
@@ -230,18 +191,7 @@
                           :address
                           :issuer]})
 
-(defn- move-validator-config
-  "Raises one of the validation settings from a nested map up into the main config. Because we dispatch on the validator
-  keywords, but only after decrypting the response, we use this to preserve the config setting without having to
-  implement a dummy method"
-  [options validator-type validator]
-  (if (some #(= validator %) (get options validator-type))
-    (-> options
-        (update validator-type (fn [e] (remove #(= % validator) e)))
-        (assoc validator true))
-    options))
-
-(defn validate
+(defn validate-response
   "Validate response. Returns decrypted response if valid. Options:
 
   * `:response-validators` - optional. The validators to run against the `<Response>` itself. Validators are
@@ -272,36 +222,37 @@
   * `:allowable-clock-skew-seconds` - optional. By default, 3 minutes. The amount of leeway to use when validating
     `NotOnOrAfter` and `NotBefore` attributes."
   {:arglists '([response idp-cert sp-private-key]
-               [response idp-cert sp-private-key {:keys [response-validators
-                                                         assertion-validators
-                                                         acs-url
-                                                         request-id
-                                                         state-manager
-                                                         user-agent-address
-                                                         issuer
-                                                         solicited?
-                                                         allowable-clock-skew-seconds]}])}
-  ([response idp-cert sp-private-key]
-   (validate response idp-cert sp-private-key nil))
+               [response {:keys [response-validators
+                                 assertion-validators
+                                 acs-url
+                                 request-id
+                                 state-manager
+                                 user-agent-address
+                                 issuer
+                                 solicited?
+                                 allowable-clock-skew-seconds]}])}
+  (^Response [req idp-cert sp-private-key]
+   (validate-response req {:idp-cert idp-cert
+                           :sp-private-key sp-private-key}))
 
-  ([response idp-cert sp-private-key options]
-   (let [options                                            (-> (merge default-validation-options options)
-                                                                (assoc :idp-cert (coerce/->Credential idp-cert))
-                                                                (move-validator-config :assertion-validators :require-encryption))
-         {:keys [response-validators assertion-validators]} options]
-     (when (:require-encryption options)
-       (ensure-encrypted-assertions response))
-     (when-let [response (coerce/->Response response)]
-       (let [decrypted-response (if sp-private-key
-                                  (decrypt-response response sp-private-key)
-                                  response)]
-         (doseq [validator response-validators]
-           (validate-response validator response decrypted-response options))
+  (^Response [req options]
+   (let [options                      (-> (merge default-validation-options options)
+                                          (assoc :request req :request-builder (AuthnRequestBuilder.)))
+         {:keys [response-validators
+                 assertion-validators
+                 sp-private-key]}     options]
+     (when-let [msg-ctx (coerce/ring-request->MessageContext req)]
+       (doseq [validator response-validators]
+         (message/validate-message validator msg-ctx options))
+       (let [decrypted-response (cond-> (coerce/->Response msg-ctx)
+                                  sp-private-key (decrypt-response sp-private-key))]
          (doseq [assertion (opensaml-assertions decrypted-response)
                  validator assertion-validators]
            (validate-assertion validator assertion options))
+         ;; TODO: repalce this with usage of opensaml's client storage system
+         (when-let [state-manager (:state-manager options)]
+           (state/accept-response! state-manager (.getInResponseTo decrypted-response)))
          decrypted-response)))))
-
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                        Convenient Clojurey Map Util Fns                                        |
@@ -327,26 +278,26 @@
 ;; https://www.purdue.edu/apps/account/docs/Shibboleth/Shibboleth_information.jsp
 ;;  Or
 ;; https://wiki.library.ucsf.edu/display/IAM/EDS+Attributes
-(def saml2-attr->name
-  (let [names {"urn:oid:0.9.2342.19200300.100.1.1" "uid"
-               "urn:oid:0.9.2342.19200300.100.1.3" "mail"
-               "urn:oid:2.16.840.1.113730.3.1.241" "displayName"
-               "urn:oid:2.5.4.3"                   "cn"
-               "urn:oid:2.5.4.4"                   "sn"
-               "urn:oid:2.5.4.12"                  "title"
-               "urn:oid:2.5.4.20"                  "phone"
-               "urn:oid:2.5.4.42"                  "givenName"
-               "urn:oid:2.5.6.8"                   "organizationalRole"
-               "urn:oid:2.16.840.1.113730.3.1.3"   "employeeNumber"
-               "urn:oid:2.16.840.1.113730.3.1.4"   "employeeType"
-               "urn:oid:1.3.6.1.4.1.5923.1.1.1.1"  "eduPersonAffiliation"
-               "urn:oid:1.3.6.1.4.1.5923.1.1.1.2"  "eduPersonNickname"
-               "urn:oid:1.3.6.1.4.1.5923.1.1.1.6"  "eduPersonPrincipalName"
-               "urn:oid:1.3.6.1.4.1.5923.1.1.1.9"  "eduPersonScopedAffiliation"
-               "urn:oid:1.3.6.1.4.1.5923.1.1.1.10" "eduPersonTargetedID"
-               "urn:oid:1.3.6.1.4.1.5923.1.6.1.1"  "eduCourseOffering"}]
-    (fn [attr-oid]
-      (get names attr-oid attr-oid))))
+(def ^:private -saml2-attr->name {"urn:oid:0.9.2342.19200300.100.1.1" "uid"
+                                  "urn:oid:0.9.2342.19200300.100.1.3" "mail"
+                                  "urn:oid:2.16.840.1.113730.3.1.241" "displayName"
+                                  "urn:oid:2.5.4.3"                   "cn"
+                                  "urn:oid:2.5.4.4"                   "sn"
+                                  "urn:oid:2.5.4.12"                  "title"
+                                  "urn:oid:2.5.4.20"                  "phone"
+                                  "urn:oid:2.5.4.42"                  "givenName"
+                                  "urn:oid:2.5.6.8"                   "organizationalRole"
+                                  "urn:oid:2.16.840.1.113730.3.1.3"   "employeeNumber"
+                                  "urn:oid:2.16.840.1.113730.3.1.4"   "employeeType"
+                                  "urn:oid:1.3.6.1.4.1.5923.1.1.1.1"  "eduPersonAffiliation"
+                                  "urn:oid:1.3.6.1.4.1.5923.1.1.1.2"  "eduPersonNickname"
+                                  "urn:oid:1.3.6.1.4.1.5923.1.1.1.6"  "eduPersonPrincipalName"
+                                  "urn:oid:1.3.6.1.4.1.5923.1.1.1.9"  "eduPersonScopedAffiliation"
+                                  "urn:oid:1.3.6.1.4.1.5923.1.1.1.10" "eduPersonTargetedID"
+                                  "urn:oid:1.3.6.1.4.1.5923.1.6.1.1"  "eduCourseOffering"})
+
+(defn- saml2-attr->name [attr-oid]
+  (get -saml2-attr->name attr-oid attr-oid))
 
 ;; http://kevnls.blogspot.gr/2009/07/processing-saml-in-java-using-opensaml.html
 ;; http://stackoverflow.com/questions/9422545/decrypting-encrypted-assertion-using-saml-2-0-in-java-using-opensaml

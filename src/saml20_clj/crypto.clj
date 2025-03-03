@@ -1,31 +1,21 @@
 (ns saml20-clj.crypto
   (:require [saml20-clj.coerce :as coerce])
-  (:import org.apache.xml.security.Init
-           org.opensaml.security.credential.Credential
-           org.opensaml.xmlsec.signature.support.SignatureConstants))
+  (:import [org.opensaml.saml.common.messaging.context SAMLPeerEntityContext SAMLProtocolContext]
+           [org.opensaml.security.credential BasicCredential Credential]
+           [org.opensaml.xmlsec.keyinfo.impl.provider DEREncodedKeyValueProvider DSAKeyValueProvider ECKeyValueProvider InlineX509DataProvider RSAKeyValueProvider]
+           org.apache.xml.security.Init
+           org.opensaml.messaging.context.MessageContext
+           org.opensaml.saml.common.binding.security.impl.SAMLProtocolMessageXMLSignatureSecurityHandler
+           org.opensaml.saml.common.xml.SAMLConstants
+           org.opensaml.saml.saml2.binding.security.impl.SAML2HTTPRedirectDeflateSignatureSecurityHandler
+           org.opensaml.saml.saml2.metadata.SPSSODescriptor
+           org.opensaml.security.credential.impl.CollectionCredentialResolver
+           org.opensaml.xmlsec.context.SecurityParametersContext
+           org.opensaml.xmlsec.keyinfo.impl.BasicProviderKeyInfoCredentialResolver
+           org.opensaml.xmlsec.signature.support.impl.ExplicitKeySignatureTrustEngine
+           org.opensaml.xmlsec.SignatureValidationParameters))
 
-(def signature-algorithms
-  {:dsa   {nil     SignatureConstants/ALGO_ID_SIGNATURE_DSA
-           :sha1   SignatureConstants/ALGO_ID_SIGNATURE_DSA_SHA1
-           :sha256 SignatureConstants/ALGO_ID_SIGNATURE_DSA_SHA256}
-   :rsa   {nil        SignatureConstants/ALGO_ID_SIGNATURE_RSA
-           :sha1      SignatureConstants/ALGO_ID_SIGNATURE_RSA_SHA1
-           :ripemd160 SignatureConstants/ALGO_ID_SIGNATURE_RSA_RIPEMD160
-           :sha256    SignatureConstants/ALGO_ID_SIGNATURE_RSA_SHA256
-           :sha224    SignatureConstants/ALGO_ID_SIGNATURE_RSA_SHA224
-           :sha384    SignatureConstants/ALGO_ID_SIGNATURE_RSA_SHA384
-           :sha512    SignatureConstants/ALGO_ID_SIGNATURE_RSA_SHA512}
-   :ecdsa {:sha1   SignatureConstants/ALGO_ID_SIGNATURE_ECDSA_SHA1
-           :sha224 SignatureConstants/ALGO_ID_SIGNATURE_ECDSA_SHA224
-           :sha256 SignatureConstants/ALGO_ID_SIGNATURE_ECDSA_SHA256
-           :sha384 SignatureConstants/ALGO_ID_SIGNATURE_ECDSA_SHA384
-           :sha512 SignatureConstants/ALGO_ID_SIGNATURE_ECDSA_SHA512}})
-
-(def canonicalization-algorithms
-  {:omit-comments      SignatureConstants/ALGO_ID_C14N_OMIT_COMMENTS
-   :with-comments      SignatureConstants/ALGO_ID_C14N_WITH_COMMENTS
-   :excl-omit-comments SignatureConstants/ALGO_ID_C14N_EXCL_OMIT_COMMENTS
-   :excl-with-comments SignatureConstants/ALGO_ID_C14N_EXCL_WITH_COMMENTS})
+(set! *warn-on-reflection* true)
 
 (defn has-private-key?
   "Will check if the provided keystore contains a private key or not."
@@ -36,40 +26,14 @@
                                         (coerce/->Credential (coerce/->PrivateKey credential))))]
     (some? (.getPrivateKey credential))))
 
-;; TODO -- I'm pretty sure this mutates `object`
-(defn sign
-  ^org.w3c.dom.Element [object credential & {:keys [signature-algorithm
-                                                    canonicalization-algorithm]
-                                             :or   {signature-algorithm        [:rsa :sha256]
-                                                    canonicalization-algorithm :excl-omit-comments}}]
-  (when-let [object (coerce/->SAMLObject object)]
-    (when-let [^Credential credential (try
-                                        (coerce/->Credential credential)
-                                        (catch Throwable _
-                                          (coerce/->Credential (coerce/->PrivateKey credential))))]
-      (let [signature (doto (.buildObject (org.opensaml.xmlsec.signature.impl.SignatureBuilder.))
-                        (.setSigningCredential credential)
-                        (.setSignatureAlgorithm (or (get-in signature-algorithms signature-algorithm)
-                                                    (throw (ex-info "No matching signature algorithm"
-                                                                    {:algorithm signature-algorithm}))))
-                        (.setCanonicalizationAlgorithm (or (get canonicalization-algorithms canonicalization-algorithm)
-                                                           (throw (ex-info "No matching canonicalization algorithm"
-                                                                           {:algorithm canonicalization-algorithm})))))
-            key-info-gen (doto (new org.opensaml.xmlsec.keyinfo.impl.X509KeyInfoGeneratorFactory)
-                           (.setEmitEntityCertificate true))]
-        (when-let [key-info (.generate (.newInstance key-info-gen) credential)] ; No need to test X509 coercion first
-          (.setKeyInfo signature key-info))
-        (.setSignature object signature)
-        (let [element (coerce/->Element object)]
-          (org.opensaml.xmlsec.signature.support.Signer/signObject signature)
-          element)))))
-
-(defn decrypt! [sp-private-key element]
+(defn- decrypt! [sp-private-key element]
   (when-let [sp-private-key (coerce/->PrivateKey sp-private-key)]
     (when-let [element (coerce/->Element element)]
       (com.onelogin.saml2.util.Util/decryptElement element sp-private-key))))
 
-(defn recursive-decrypt! [sp-private-key element]
+(defn recursive-decrypt!
+  "Mutates a SAML object to decrypt any encrypted Assertions present."
+  [sp-private-key element]
   (when-let [sp-private-key (coerce/->PrivateKey sp-private-key)]
     (when-let [element (coerce/->Element element)]
       (when (and (= (.getLocalName element) "EncryptedAssertion")
@@ -82,18 +46,6 @@
               :when (instance? org.w3c.dom.Element child)]
         (recursive-decrypt! sp-private-key child)))))
 
-(defn ^:private secure-random-bytes
-  (^bytes [size]
-   (let [ba (byte-array size)
-         r  (java.security.SecureRandom.)]
-     (.nextBytes r ba)
-     ba))
-  (^bytes []
-   (secure-random-bytes 20)))
-
-(defn new-secret-key ^javax.crypto.spec.SecretKeySpec []
-  (javax.crypto.spec.SecretKeySpec. (secure-random-bytes) "HmacSHA1"))
-
 (defonce ^:private -init
   (delay
     (Init/init)
@@ -101,15 +53,19 @@
 
 @-init
 
-(defn signed? [object]
-  (when-let [object (coerce/->SAMLObject object)]
-    (.isSigned object)))
+(defn authenticated?
+  "True if the MessageContext's PeerEntity subcontext has isAuthenticated set"
+  [^MessageContext msg-ctx]
+  (let [^SAMLPeerEntityContext peer-entity-ctx (.. msg-ctx
+                                                   (getSubcontext SAMLPeerEntityContext))]
+    (.isAuthenticated peer-entity-ctx)))
 
-(defn signature [object]
+(defn- signature [object]
   (when-let [object (coerce/->SAMLObject object)]
     (.getSignature object)))
 
 (defn assert-signature-valid-when-present
+  "Attempts to validate any signatures in a SAML object. Raises if signature validation fails."
   [object credential]
   (when-let [signature (signature object)]
     (when-let [credential (coerce/->Credential credential)]
@@ -128,3 +84,54 @@
                           {:object (coerce/->xml-string object)}
                           e))))
       :valid)))
+
+(def ^:private basic-key-info-cred-resolver
+  (BasicProviderKeyInfoCredentialResolver. [(RSAKeyValueProvider.)
+                                            (DSAKeyValueProvider.)
+                                            (ECKeyValueProvider.)
+                                            (DEREncodedKeyValueProvider.)
+                                            (InlineX509DataProvider.)]))
+
+(defn handle-signature-security
+  "Uses OpenSAMLs security handlers to verify the signature of an incoming request for both
+  GET and POST-based SAML flows.
+
+  Returns the verified MessageContext for the request.
+
+  The SAMLPeerEntityContext subcontext of the MessageContext will have a method isAuthenticated
+  that returns true if the signature verification succeeded.
+
+  It will raise if the verification fails and a signature was provided.
+
+  It will return the message context if no sigature was provided but isAuthenticated will be
+  false."
+  ^MessageContext [^MessageContext msg-ctx request issuer credential]
+  (let [credential (doto ^BasicCredential (coerce/->Credential credential)
+                     (.setEntityId issuer))
+        http-req-supplier (coerce/ring-request->HttpServletRequestSupplier request)
+        sig-trust-engine (ExplicitKeySignatureTrustEngine.
+                          (CollectionCredentialResolver. [credential])
+                          basic-key-info-cred-resolver)
+        sig-val-parameters (doto (SignatureValidationParameters.)
+                             (.setSignatureTrustEngine sig-trust-engine))
+        ^SAMLPeerEntityContext peer-entity-ctx (.ensureSubcontext msg-ctx SAMLPeerEntityContext)
+        ^SAMLProtocolContext protocol-ctx (.ensureSubcontext msg-ctx SAMLProtocolContext)
+        ^SecurityParametersContext sec-params-ctx (.ensureSubcontext msg-ctx SecurityParametersContext)]
+    (doto peer-entity-ctx
+      (.setEntityId issuer)
+      (.setRole SPSSODescriptor/DEFAULT_ELEMENT_NAME))
+    (.setProtocol protocol-ctx SAMLConstants/SAML20P_NS)
+    (.setSignatureValidationParameters sec-params-ctx sig-val-parameters)
+
+    ;; if we have a GET request we are dealing with a redirect where the signature is the query parameters
+    ;; this uses a different security handler than POST requests where the signature is embedded in the
+    ;; XML Document
+    (if (= (:request-method request) :get)
+      (doto (SAML2HTTPRedirectDeflateSignatureSecurityHandler.)
+        (.setHttpServletRequestSupplier http-req-supplier)
+        (.initialize)
+        (.invoke msg-ctx))
+      (doto (SAMLProtocolMessageXMLSignatureSecurityHandler.)
+        (.initialize)
+        (.invoke msg-ctx)))
+    msg-ctx))

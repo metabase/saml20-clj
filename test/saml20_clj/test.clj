@@ -1,15 +1,29 @@
-(ns saml20-clj.test
-  "Test utils.")
+ (ns saml20-clj.test
+  "Test utils."
+  (:require [clojure.string :as str]
+            ring.util.codec
+            [saml20-clj.coerce :as coerce]
+            [saml20-clj.encode-decode :as encode-decode])
+  (:import [org.apache.commons.codec.binary Base64]))
 
-(def idp-entity-id "idp.example.com")
-(def idp-uri "https://idp.example.com")
-
-(def sp-entity-id "sp.example.com")
-(def sp-attribute-consume-service-endpoint "http://sp.example.com/demo1/index.php?acs")
+(set! *warn-on-reflection* true)
 
 ;; keystore has SP x.509 cert and private keys under "sp" and IdP X.509 cert under "idp"
 (def keystore-filename "test/saml20_clj/test/keystore.jks")
 (def keystore-password "123456")
+
+(defn- bytes->str
+  ^String [^bytes some-bytes]
+  (when some-bytes
+    (String. some-bytes "UTF-8")))
+
+(defn- encode-base64 ^bytes [^bytes bs]
+  (when bs
+    (Base64/encodeBase64 bs)))
+
+(defn str->base64
+  ^String [^String string]
+  (-> string encode-decode/str->bytes encode-base64 bytes->str))
 
 (defn- sample-file [file-name]
   (slurp (str "test/saml20_clj/test/" file-name)))
@@ -35,9 +49,58 @@
                    :when v]
                [k true]))))
 
+;; Metadata tests
+
+(def metadata-with-key-info (sample-file "metadata-with-keyinfo.xml"))
+(def metadata-without-key-info (sample-file "metadata-without-keyinfo.xml"))
+
+;; Logout Response
+
+(def logout-issuer-id "http://idp.example.com/metadata.php")
+(def logout-request-id "ONELOGIN_21df91a89767879fc0f7df6a1490c6000c81644d")
+
+(defn ring-logout-response-post
+  "Return a ring map of the logout response as an HTTP-Post binding."
+  [status relay-state & {:keys [signature] :or {signature true}}]
+  (let [response (sample-file (condp = [status signature]
+                                [:success true] "logout-response-success-with-signature.xml"
+                                [:success :bad] "logout-response-success-with-bad-signature.xml"
+                                [:authnfailed true] "logout-response-authnfailure-with-signature.xml"
+                                [:success false] "logout-response-success-without-signature.xml"))]
+    {:params {:SAMLResponse (str->base64 response)
+              :RelayState (str->base64 relay-state)}
+     :request-method :post
+     :content-type "application/x-www-form-urlencoded"}))
+
+(defn ring-logout-response-get
+  "Return a ring map of the logout response as an HTTP-Redirect binding."
+  [status & {:keys [signature] :or {signature true}}]
+  (let [response (-> (condp = [status signature]
+                       [:success true] "logout-response-success-with-signature.edn"
+                       [:success :bad] "logout-response-success-with-bad-signature.edn"
+                       [:authnfailed true] "logout-response-authnfailure-with-signature.edn"
+                       [:success false] "logout-response-success-without-signature.edn")
+                     sample-file
+                     read-string)]
+    {:query-string (->> (zipmap (->> response keys (map name))
+                                (vals response))
+                        (map (partial str/join "="))
+                        (str/join "&"))
+     :params (zipmap (->> response keys (map name))
+                     (->> response vals (map ring.util.codec/url-decode)))
+     :request-method :get}))
+
 ;;
 ;; Confirmation Data
 ;;
+
+(defn ring-response-post
+  "Return a ring map of a response as an HTTP-Post binding"
+  [response & [relay-state]]
+  {:params {:SAMLResponse (str->base64 (coerce/->xml-string response))
+            :RelayState (str->base64 (or relay-state "test-relay-state"))}
+   :request-method :post
+   :content-type "application/x-www-form-urlencoded"})
 
 (defmethod response {:invalid-confirmation-data? true}
   [_]
@@ -111,8 +174,8 @@
   (or (= {:assertion-signed? true :assertion-encrypted? true} (dissoc response-map :response))
       ((some-fn :saml2-assertion? :no-namespace-assertion?) response-map)))
 
-(defn signed? [response-map]
-  ((some-fn :message-signed? :assertion-signed?) response-map))
+(defn message-signed? [response-map]
+  ((some-fn :message-signed?) response-map))
 
 (defn assertions-encrypted? [response-map]
   ((some-fn :assertion-encrypted?) response-map))

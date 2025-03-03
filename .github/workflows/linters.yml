@@ -27,16 +27,6 @@ jobs:
           cache-key: "eastwood"
       - run: clojure -X:dev:eastwood
 
-  Namespace-Declarations:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4.1.7
-      - uses: ./.github/actions/setup
-        with:
-          cache-key: "namespace-declarations"
-      - run: clojure -X:dev:namespace-checker
-
   Reflection-Warnings:
     runs-on: ubuntu-latest
     timeout-minutes: 10
