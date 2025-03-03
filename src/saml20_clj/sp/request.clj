@@ -165,8 +165,7 @@
                                     SAMLConstants/SAML20_NS
                                     "NameID"
                                     "saml")
-                  (.setValue user-email))))
-  )
+                  (.setValue user-email)))))
 
 (defn idp-logout-redirect-response
   "Return Ring response for HTTP 302 redirect."
