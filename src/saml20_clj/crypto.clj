@@ -3,6 +3,8 @@
   (:import org.apache.xml.security.Init
            org.opensaml.security.credential.Credential))
 
+(set! *warn-on-reflection* true)
+
 (defn has-private-key?
   "Will check if the provided keystore contains a private key or not."
   [credential]
