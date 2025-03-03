@@ -28,26 +28,22 @@
     ^java.security.PrivateKey [this]
     ^java.security.PrivateKey [this ^String algorithm]
     "Coerce something such as a base-64-encoded string or byte array to a `PrivateKey`. This isn't used directly by
- OpenSAML -- the key must be passed as part of an OpenSAML `Credential`. See `->Credential`."))
+  OpenSAML -- the key must be passed as part of an OpenSAML `Credential`. See `->Credential`."))
 
 (defprotocol CoerceToX509Certificate
   (->X509Certificate ^java.security.cert.X509Certificate [this]
     "Coerce something such as a base-64-encoded string or byte array to a `java.security.cert.X509Certificate`. This
- class isn't used directly by OpenSAML; instead
-certificate must be coerced to an OpenSAML `Credential`. See
+  class isn't used directly by OpenSAML; instead certificate must be coerced to an OpenSAML `Credential`. See
 `->Credential`."))
 
 (defprotocol CoerceToCredential
   (->Credential
     ^org.opensaml.security.credential.Credential [this]
     ^org.opensaml.security.credential.Credential [public-key private-key]
-    "Coerce something such as a byte array or base-64-encoded String to an OpenSAML `Credential`. Typically
-you'd use
-  the credential with just the public key for the IdP's credentials
-for encrypting requests (in combination with SP
+    "Coerce something such as a byte array or base-64-encoded String to an OpenSAML `Credential`. Typically you'd use
+  the credential with just the public key for the IdP's credentials for encrypting requests (in combination with SP
   credentails) or verifying signature(s) in the response. A credential with both public and private keys would
-  typically contain *your* public and private keys
-for encrypting requests (in combination with IdP credentials) or
+  typically contain *your* public and private keys for encrypting requests (in combination with IdP credentials) or
   for decrypting encrypted assertions in the response."))
 
 (defprotocol CoerceToElement
