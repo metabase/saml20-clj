@@ -298,7 +298,7 @@
                                                  {:response-validators  [:issuer]
                                                   :assertion-validators [:issuer]}))))))
 
-(deftest Assertion->map-test
+(deftest assertion-test
   (testing "basic checks on Assertions->map conversions"
     (doseq [{:keys [response], :as response-map} (test/responses)
             :when                                (test/valid-confirmation-data? response-map)]
@@ -313,8 +313,7 @@
                              :not-on-or-after (t/instant "2024-01-18T06:21:48Z"),
                              :address         "192.168.1.1",
                              :recipient       "http://sp.example.com/demo1/index.php?acs"}}
-             (response/Assertion->map
-              (first (response/opensaml-assertions (coerce/->Response response))))))))
+             (first (response/assertions (coerce/->Response response)))))))
   (testing "Attribute Nodes sharing a Name will collect all of their contained Attribute Value Nodes."
     (let [response (test/response {})]
       (is (= {"uid"                  '("test")
@@ -323,5 +322,4 @@
               "eduPersonAffiliation" '("users" "examplerole1")
               ;; this key is from two Attribute nodes with the same Name
               "member_of"            '("test-group1" "test-group2" "test-group3")}
-             (:attrs (response/Assertion->map
-                      (first (response/opensaml-assertions (coerce/->Response response))))))))))
+             (:attrs (first (response/assertions (coerce/->Response response)))))))))

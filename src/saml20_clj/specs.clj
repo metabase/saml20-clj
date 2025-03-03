@@ -9,7 +9,7 @@
            org.opensaml.security.credential.Credential
            org.w3c.dom.Element))
 
-(defn url? [s]
+(defn- url? [s]
   (try
     (URL. s)
     true
@@ -21,7 +21,6 @@
 (s/def ::issuer url?)
 (s/def ::slo-url url?)
 
-(s/def ::request-id string?)
 (s/def ::sp-name string?)
 (s/def ::app-name string?)
 

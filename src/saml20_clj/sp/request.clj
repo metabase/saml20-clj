@@ -3,12 +3,12 @@
              [java-time.api :as t]
              [saml20-clj.coerce :as coerce]
              [saml20-clj.state :as state])
-   (:import org.opensaml.messaging.context.MessageContext
-            [org.opensaml.saml.common.messaging.context SAMLBindingContext SAMLEndpointContext SAMLPeerEntityContext]
-            org.opensaml.saml.common.xml.SAMLConstants
-            org.opensaml.saml.saml2.binding.encoding.impl.HTTPRedirectDeflateEncoder
+   (:import [org.opensaml.saml.common.messaging.context SAMLBindingContext SAMLEndpointContext SAMLPeerEntityContext]
             [org.opensaml.saml.saml2.core AuthnRequest LogoutRequest NameIDType]
             [org.opensaml.saml.saml2.core.impl AuthnRequestBuilder IssuerBuilder LogoutRequestBuilder NameIDBuilder NameIDPolicyBuilder]
+            org.opensaml.messaging.context.MessageContext
+            org.opensaml.saml.common.xml.SAMLConstants
+            org.opensaml.saml.saml2.binding.encoding.impl.HTTPRedirectDeflateEncoder
             org.opensaml.saml.saml2.metadata.impl.SingleSignOnServiceBuilder
             org.opensaml.xmlsec.context.SecurityParametersContext
             org.opensaml.xmlsec.SignatureSigningParameters))
@@ -82,8 +82,7 @@
 (defn- map-making-servlet
   "Implements a minimum HttpServletResponse for HTTPRedirectDeflateEncoder"
   []
-  (let [response (
-atom {:status 302 :body "" :headers {}})
+  (let [response (atom {:status 302 :body "" :headers {}})
         servlet-wrapper (reify jakarta.servlet.http.HttpServletResponse
                           (setHeader [_this name value]
                             (swap! response update :headers assoc name value))
@@ -126,7 +125,7 @@ atom {:status 302 :body "" :headers {}})
 
 (defn idp-redirect-response
   "Return Ring response for HTTP 302 redirect."
-  [{:keys [ ;; e.g. something like a UUID. Random UUID will be used if no other ID is provided
+  [{:keys [;; e.g. something like a UUID. Random UUID will be used if no other ID is provided
            request-id
            ;; e.g. "Metabase"
            sp-name
@@ -181,5 +180,6 @@ atom {:status 302 :body "" :headers {}})
      (redirect-response (setup-message-context logout-request credential sig-alg idp-url) relay-state))))
 
 (defn logout-redirect-location
+  "Return only the URI of the logout redirect."
   [& args]
   (get-in (idp-logout-redirect-response args) [:headers "location"]))

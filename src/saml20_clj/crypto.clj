@@ -1,17 +1,17 @@
 (ns saml20-clj.crypto
   (:require [saml20-clj.coerce :as coerce])
-  (:import org.apache.xml.security.Init
+  (:import [org.opensaml.saml.common.messaging.context SAMLPeerEntityContext SAMLProtocolContext]
+           [org.opensaml.security.credential BasicCredential Credential]
+           [org.opensaml.xmlsec.keyinfo.impl.provider DEREncodedKeyValueProvider DSAKeyValueProvider ECKeyValueProvider InlineX509DataProvider RSAKeyValueProvider]
+           org.apache.xml.security.Init
            org.opensaml.messaging.context.MessageContext
            org.opensaml.saml.common.binding.security.impl.SAMLProtocolMessageXMLSignatureSecurityHandler
-           [org.opensaml.saml.common.messaging.context SAMLPeerEntityContext SAMLProtocolContext]
            org.opensaml.saml.common.xml.SAMLConstants
            org.opensaml.saml.saml2.binding.security.impl.SAML2HTTPRedirectDeflateSignatureSecurityHandler
            org.opensaml.saml.saml2.metadata.SPSSODescriptor
-           [org.opensaml.security.credential BasicCredential Credential]
            org.opensaml.security.credential.impl.CollectionCredentialResolver
            org.opensaml.xmlsec.context.SecurityParametersContext
            org.opensaml.xmlsec.keyinfo.impl.BasicProviderKeyInfoCredentialResolver
-           [org.opensaml.xmlsec.keyinfo.impl.provider DEREncodedKeyValueProvider DSAKeyValueProvider ECKeyValueProvider InlineX509DataProvider RSAKeyValueProvider]
            org.opensaml.xmlsec.signature.support.impl.ExplicitKeySignatureTrustEngine
            org.opensaml.xmlsec.SignatureValidationParameters))
 
@@ -26,12 +26,14 @@
                                         (coerce/->Credential (coerce/->PrivateKey credential))))]
     (some? (.getPrivateKey credential))))
 
-(defn decrypt! [sp-private-key element]
+(defn- decrypt! [sp-private-key element]
   (when-let [sp-private-key (coerce/->PrivateKey sp-private-key)]
     (when-let [element (coerce/->Element element)]
       (com.onelogin.saml2.util.Util/decryptElement element sp-private-key))))
 
-(defn recursive-decrypt! [sp-private-key element]
+(defn recursive-decrypt!
+  "Mutates a SAML object to decrypt any encrypted Assertions present."
+  [sp-private-key element]
   (when-let [sp-private-key (coerce/->PrivateKey sp-private-key)]
     (when-let [element (coerce/->Element element)]
       (when (and (= (.getLocalName element) "EncryptedAssertion")
@@ -58,11 +60,12 @@
                                                    (getSubcontext SAMLPeerEntityContext))]
     (.isAuthenticated peer-entity-ctx)))
 
-(defn signature [object]
+(defn- signature [object]
   (when-let [object (coerce/->SAMLObject object)]
     (.getSignature object)))
 
 (defn assert-signature-valid-when-present
+  "Attempts to validate any signatures in a SAML object. Raises if signature validation fails."
   [object credential]
   (when-let [signature (signature object)]
     (when-let [credential (coerce/->Credential credential)]

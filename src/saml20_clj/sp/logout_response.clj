@@ -5,12 +5,15 @@
   (:import [org.opensaml.saml.saml2.core LogoutResponse StatusCode]
            org.opensaml.saml.saml2.core.impl.LogoutRequestBuilder))
 
+(set! *warn-on-reflection* true)
+
 (defn logout-success?
+  "Return true if a LogoutResponse object has a SUCCESS SAML status element."
   [^LogoutResponse response]
   (let [status-value (.. response getStatus getStatusCode getValue)]
     (= status-value StatusCode/SUCCESS)))
 
-(def default-logout-validation-options
+(def ^:private default-logout-validation-options
   {:response-validators [:signature
                          :issuer
                          :in-response-to

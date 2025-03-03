@@ -1,7 +1,6 @@
 (ns saml20-clj.sp.request-test
   (:require [clojure.test :refer [deftest is testing]]
             [java-time.api :as t]
-            [saml20-clj.encode-decode :as encode-decode]
             [saml20-clj.sp.request :as request]
             [saml20-clj.test :as test]))
 
@@ -100,7 +99,7 @@
                 {:issuer issuer
                  :user-email user-email
                  :idp-url idp-url
-                 :relay-state (encode-decode/str->base64 issuer)
+                 :relay-state (test/str->base64 issuer)
                  :request-id req-id}))))
       (testing "with signing"
         (is (= {:status 302
@@ -129,5 +128,5 @@
                  :credential test/sp-private-key
                  :user-email user-email
                  :idp-url idp-url
-                 :relay-state (encode-decode/str->base64 issuer)
+                 :relay-state (test/str->base64 issuer)
                  :request-id req-id})))))))

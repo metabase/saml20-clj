@@ -226,7 +226,7 @@ done in the following manner:
     :user-email "user@example.com"
     :idp-url    "http://idp.example.com/SSOService.php"
     :request-id "ONELOGIN_109707f0030a5d00620c9d9df97f627afe9dcc24"
-    :relay-state (encode-decode/str->base64 "http://sp.example.com/demo1/metadata.php")})
+    :relay-state "http://sp.example.com/demo1/metadata.php"})
 
 ```
 
@@ -238,7 +238,7 @@ Some clients will prefer that you send them the `SAMLRequest` as a query paramet
     :user-email "user@example.com"
     :idp-url    "http://idp.example.com/SSOService.php"
     :request-id "ONELOGIN_109707f0030a5d00620c9d9df97f627afe9dcc24"
-    :relay-state (encode-decode/str->base64 "http://sp.example.com/demo1/metadata.php")})
+    :relay-state "http://sp.example.com/demo1/metadata.php"})
 
 ;; =>
 ;; "http://idp.example.com/SSOService.php?SAMLRequest=fVLLbs<snip>&RelayState=aHR<snip>"

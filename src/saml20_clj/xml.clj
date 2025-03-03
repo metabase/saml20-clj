@@ -4,7 +4,9 @@
            javax.xml.XMLConstants
            org.w3c.dom.Document))
 
-(defn document-builder
+(set! *warn-on-reflection* true)
+
+(defn- document-builder
   ^DocumentBuilder []
   (.newDocumentBuilder
    (doto (DocumentBuilderFactory/newInstance)
@@ -16,7 +18,9 @@
      (.setXIncludeAware false)
      (.setExpandEntityReferences false))))
 
-(defn clone-document [^org.w3c.dom.Document document]
+(defn clone-document
+  "Return a clone of the provided XML document."
+  [^org.w3c.dom.Document document]
   (when document
     (let [clone         (.. (DocumentBuilderFactory/newInstance) newDocumentBuilder newDocument)
           original-root (.getDocumentElement document)
