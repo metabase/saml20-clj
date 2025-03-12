@@ -26,6 +26,14 @@
 
 (def ^:private -sig-alg "http://www.w3.org/2000/09/xmldsig#rsa-sha1")
 
+(defn- keyword->protocol-binding
+  [binding-kw]
+  (condp = binding-kw
+    :post SAMLConstants/SAML2_POST_BINDING_URI
+    :redirect SAMLConstants/SAML2_REDIRECT_BINDING_URI
+    (throw (ex-info "Unsupported protocol binding argument" {:arg binding-kw
+                                                             :allowed [:redirect :post]}))))
+
 (defn- setup-message-context
   [message credential sig-alg idp-url]
   (let [msgctx (doto (MessageContext.) (.setMessage message))]
@@ -49,12 +57,12 @@
     msgctx))
 
 (defn- build-authn-obj
-  ^AuthnRequest [request-id instant sp-name idp-url acs-url issuer]
+  ^AuthnRequest [request-id instant sp-name idp-url acs-url issuer protocol-binding]
   (doto (.buildObject (AuthnRequestBuilder.))
     (.setID request-id)
     (.setIssueInstant instant)
     (.setDestination idp-url)
-    (.setProtocolBinding SAMLConstants/SAML2_REDIRECT_BINDING_URI)
+    (.setProtocolBinding (keyword->protocol-binding protocol-binding))
     (.setIsPassive false)
     (.setProviderName sp-name)
     (.setAssertionConsumerServiceURL acs-url)
@@ -73,8 +81,9 @@
                    state-manager
                    credential
                    sig-alg
-                   instant]
-  (let [request (build-authn-obj request-id instant sp-name idp-url acs-url issuer)]
+                   instant
+                   protocol-binding]
+  (let [request (build-authn-obj request-id instant sp-name idp-url acs-url issuer protocol-binding)]
     (when state-manager
       (state/record-request! state-manager (.getID request)))
     (setup-message-context request credential sig-alg idp-url)))
@@ -143,14 +152,18 @@
            sig-alg
            ;; relay-state argument that will be returned by the provider
            relay-state
+           ;; protocol binding specifying if IdP should use HTTP-Post or HTTP-Redirect to respond
+           protocol-binding
            instant]
     :or   {instant (t/instant)
            request-id (random-request-id)
-           sig-alg -sig-alg}}]
+           sig-alg -sig-alg
+           protocol-binding :redirect}}]
   (assert (non-blank-string? acs-url) "acs-url is required")
   (assert (non-blank-string? idp-url) "idp-url is required")
   (assert (non-blank-string? sp-name) "sp-name is required")
   (assert (non-blank-string? issuer) "issuer is required")
+  (assert (keyword? protocol-binding) "protocol binding must be a keyword")
   (redirect-response (authn-request request-id
                                     sp-name
                                     acs-url
@@ -159,7 +172,8 @@
                                     state-manager
                                     credential
                                     sig-alg
-                                    instant)
+                                    instant
+                                    protocol-binding)
                      relay-state))
 
 (defn idp-logout-redirect-response
