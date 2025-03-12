@@ -31,23 +31,23 @@
   (testing "with signed LogoutResponse POST bindings"
     (let [request (test/ring-logout-response-post :success "relay-state" :signature true)
           msg-ctx (coerce/ring-request->MessageContext request)]
-      (crypto/handle-signature-security msg-ctx request "http://idp.example.com/metadata.php" test/idp-cert)
+      (crypto/handle-signature-security msg-ctx "http://idp.example.com/metadata.php" test/idp-cert request)
       (is (.isAuthenticated (.getSubcontext msg-ctx SAMLPeerEntityContext)))))
 
   (testing "with signed LogoutResponse Redirect bindings"
     (let [request (test/ring-logout-response-get :success :signature true)
           msg-ctx (coerce/ring-request->MessageContext request)]
-      (crypto/handle-signature-security msg-ctx request "http://idp.example.com/metadata.php" test/idp-cert)
+      (crypto/handle-signature-security msg-ctx "http://idp.example.com/metadata.php" test/idp-cert request)
       (is (.isAuthenticated (.getSubcontext msg-ctx SAMLPeerEntityContext)))))
 
   (testing "with unsigned LogoutResponse POST bindings"
     (let [request (test/ring-logout-response-post :success "relay-state" :signature false)
           msg-ctx (coerce/ring-request->MessageContext request)]
-      (crypto/handle-signature-security msg-ctx request "http://idp.example.com/metadata.php" test/idp-cert)
+      (crypto/handle-signature-security msg-ctx "http://idp.example.com/metadata.php" test/idp-cert request)
       (is (not (.isAuthenticated (.getSubcontext msg-ctx SAMLPeerEntityContext))))))
 
   (testing "with unsigned LogoutResponse Redirect bindings"
     (let [request (test/ring-logout-response-get :success :signature false)
           msg-ctx (coerce/ring-request->MessageContext request)]
-      (crypto/handle-signature-security msg-ctx request "http://idp.example.com/metadata.php" test/idp-cert)
+      (crypto/handle-signature-security msg-ctx "http://idp.example.com/metadata.php" test/idp-cert request)
       (is (not (.isAuthenticated (.getSubcontext msg-ctx SAMLPeerEntityContext)))))))

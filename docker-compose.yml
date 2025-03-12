@@ -22,11 +22,13 @@ services:
     command: ["clj", "-M:dev:e2e", "-m", "saml20-clj.e2e.server"]
     working_dir: /app
     ports:
+      - 3002:3002
       - 3001:3001
     volumes:
       - ./src:/app/src
       - ./test:/app/test
       - ./e2e:/app/e2e
+      - ../java-opensaml/:/java-opensaml
 
   selenium:
     image: selenium/standalone-chrome:latest

@@ -3,7 +3,8 @@
             [java-time.api :as t]
             [saml20-clj.coerce :as coerce]
             [saml20-clj.sp.response :as response]
-            [saml20-clj.test :as test])
+            [saml20-clj.test :as test]
+            [ring.util.response :as res])
   (:import org.opensaml.saml.saml2.core.Response))
 
 (deftest response-status-test
@@ -64,6 +65,7 @@
   (testing "unsigned responses should fail\n"
     (doseq [{:keys [response], :as response-map} (test/responses)
             :when                                (and (not (test/message-signed? response-map))
+                                                      (not (test/assertion-signed? response-map))
                                                       (not (test/malicious-signature? response-map)))]
       (testing (test/describe-response-map response-map)
         (is (thrown-with-msg?
