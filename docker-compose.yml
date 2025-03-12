@@ -25,6 +25,7 @@ services:
       - 3001:3001
     volumes:
       - ./src:/app/src
+      - ./test:/app/test
       - ./e2e:/app/e2e
 
   selenium:

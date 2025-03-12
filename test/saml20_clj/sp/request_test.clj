@@ -69,6 +69,40 @@
                              "tPvTgWDbY7Io5ENEElvsa8eJziZz3TYtFJa1AUDtO2c6BQX627"
                              "LA7Y0gCvhj035rxJZPPh8ucdTCjNA0roYFpdlQiKQZnUJmJgX2"
                              "QvB9Zr7WTIEPXMNkb%2B0%3D")}}
+               (request/idp-redirect-response request)))))
+    (testing "with a signature and http post binding"
+      (let [request {:request-id      "ONELOGIN_809707f0030a5d00620c9d9df97f627afe9dcc24"
+                     :sp-name         "SP test"
+                     :acs-url         "http://sp.example.com/demo1/index.php?acs"
+                     :idp-url         "http://idp.example.com/SSOService.php"
+                     :issuer          "http://sp.example.com/demo1/metadata.php"
+                     :credential      test/sp-private-key
+                     :relay-state     target-uri
+                     :protocl-binding :post}]
+        (is (= {:status 302,
+                :body "",
+                :headers
+                {"Cache-control" "no-cache, no-store"
+                 "Pragma" "no-cache"
+                 "location" (str "http://idp.example.com/SSOService.php?SAMLRequest="
+                                 "fVLLbtswEPwVgndJFPNwRFg2nLppDbi2YDk59FIw5KomIJEqlz"
+                                 "Lcv4%2BsKEFyiK%2B7OzuzMzudn5qaHMGjcTanacwoAaucNvZv"
+                                 "Th%2F3D9Ednc%2BmKJuat2LRhYPdwb8OMJAeaFG8dnLaeSucRI"
+                                 "PCygZQBCXKxa%2B14DETrXfBKVdTskAEH3qqb85i14AvwR%2BN"
+                                 "gsfdOqeHEFqRJNjGcJJNW0OsXJNoaFyaGKvhFLeHdi4VUrLsBR"
+                                 "grwyB6xBn9GViW23H7GUfJapnT7eb7evtjtflzx7IJm1SMXTF5"
+                                 "oxm75UxlOtNVNqlu%2BURWkGml%2BHUPw0IimiPktJI1wrmCHa"
+                                 "wsBmlDTjnjLGJZxK%2F3nIubVDAWM8Z%2BU1KMZ9%2F34gc7L3"
+                                 "n0%2FDqE4ud%2BX0Q70MaDCsOSo9HgNz0ip2VBQn86JU9vifVY"
+                                 "OuYjBmH%2BYzCXOeVbGnR2yfsGgtQyyLON0%2BQj1ftjnNWtlo"
+                                 "WrjfpPHpxvZPiaOo3ToWJ0VA2jorPYgjKVAU2T2cjx%2Bd1mLw"
+                                 "%3D%3D&RelayState=http%3A%2F%2Fsp.example.com%2Fde"
+                                 "mo1%2Findex.php%3Facs&SigAlg=http%3A%2F%2Fwww.w3.o"
+                                 "rg%2F2000%2F09%2Fxmldsig%23rsa-sha1&Signature=KJSj"
+                                 "oD6Mg7OH%2F2pCd6qEDmqSxqWZqOmBePLC5RemNjmLE2ElfnO0"
+                                 "tPvTgWDbY7Io5ENEElvsa8eJziZz3TYtFJa1AUDtO2c6BQX627"
+                                 "LA7Y0gCvhj035rxJZPPh8ucdTCjNA0roYFpdlQiKQZnUJmJgX2"
+                                 "QvB9Zr7WTIEPXMNkb%2B0%3D")}}
                (request/idp-redirect-response request)))))))
 
 (deftest idp-logout-redirect-response-test
