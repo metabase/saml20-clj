@@ -242,10 +242,11 @@
                  assertion-validators
                  sp-private-key]}     options]
      (when-let [msg-ctx (coerce/ring-request->MessageContext req)]
-       (doseq [validator response-validators]
-         (message/validate-message validator msg-ctx options))
+
        (let [decrypted-response (cond-> (coerce/->Response msg-ctx)
                                   sp-private-key (decrypt-response sp-private-key))]
+         (doseq [validator response-validators]
+           (message/validate-message validator msg-ctx (assoc options :decrypted-response decrypted-response)))
          (doseq [assertion (opensaml-assertions decrypted-response)
                  validator assertion-validators]
            (validate-assertion validator assertion options))

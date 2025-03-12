@@ -1,5 +1,6 @@
 (ns saml20-clj.e2e.server
   (:require
+   [clojure.tools.logging :as logging]
    [ring.adapter.jetty :refer [run-jetty]]
    [ring.middleware.cookies :as ring.cookies]
    [ring.middleware.params :as ring.params]
@@ -16,6 +17,7 @@
        "<ul>"
        "<li><a id=\"keycloak\" href=\"/login?idp-type=keycloak\">Login</a></li>"
        "<li><a id=\"okta\" href=\"/login?idp-type=okta\">Login</a></li>"
+       "<li><a id=\"entra\" href=\"/login?idp-type=entra\">Login</a></li>"
        "</ul>"
        "</body></html>"))
 (def home-page-logged-in
@@ -23,14 +25,21 @@
        "<ul>"
        "<li><a id=\"keycloak\" href=\"/logout?idp-type=keycloak\">Logout</a></li>"
        "<li><a id=\"okta\" href=\"/logout?idp-type=okta\">Logout</a></li>"
+       "<li><a id=\"entra\" href=\"/logout?idp-type=entra\">Logout</a></li>"
        "</ul>"
        "</body></html>"))
 (def cookie-name "COOKIE")
-(def okta-cert (slurp "e2e/saml20_clj/e2e/okta.cert"))
 
 (defn idp-login-config
   [idp-type]
   (condp = idp-type
+    :entra {:sp-name "SAMLTest"
+            :acs-url "https://test-server:3001/login"
+            :issuer "SAMLTest"
+            :idp-url "https://login.microsoftonline.com/baac9aeb-12ed-4fe9-844f-fde9aa3fc2c7/saml2"
+            :request-id "a-test-request"
+            :protocol-binding :post
+            :credential test/sp-private-key}
     :okta {:sp-name "SAMLTest"
            :acs-url "https://test-server:3001/login"
            :issuer "SAMLTest"
@@ -47,6 +56,14 @@
 (defn idp-logout-config
   [idp-type]
   (condp = idp-type
+    :entra {:sp-name "SAMLTest"
+            :acs-url "https://test-server:3001/logout"
+            :issuer "SAMLTest"
+            :idp-url "https://login.microsoftonline.com/baac9aeb-12ed-4fe9-844f-fde9aa3fc2c7/saml2"
+            :relay-state "entra"
+            :user-email "metatest@example.com"
+            :request-id "a-test-request"
+            :credential test/sp-private-key}
     :okta {:sp-name "SAMLTest"
            :acs-url "https://test-server:3001/logout"
            :issuer "SAMLTest"
@@ -67,7 +84,11 @@
 (defn validation-config
   [idp-type]
   (condp = idp-type
-    :okta {:idp-cert okta-cert
+    :entra {:idp-cert (slurp "e2e/saml20_clj/e2e/entra.cert")
+            :acs-url "https://test-server:3001/login"
+            :issuer "https://sts.windows.net/baac9aeb-12ed-4fe9-844f-fde9aa3fc2c7/"
+            :request-id "a-test-request"}
+    :okta {:idp-cert (slurp "e2e/saml20_clj/e2e/okta.cert")
            :acs-url "https://test-server:3001/login"
            :issuer "http://www.okta.com/exknlfxer1RcyaTAS5d7"
            :request-id "a-test-request"}
@@ -81,6 +102,7 @@
   (let [body (if (get cookie cookie-name)
                home-page-logged-in
                home-page-logged-out)]
+    (logging/debug "Serving Home")
     (-> {:status 200
          :body body}
         (ring.resp/content-type "text/html")
@@ -109,9 +131,9 @@
 
 (defmethod handle-login :post [_ request]
   (when (response/validate-response request
-                                         (-> (get-in request [:params "RelayState"])
-                                             keyword
-                                             validation-config))
+                                    (-> (get-in request [:params "RelayState"])
+                                        keyword
+                                        validation-config))
     (-> (ring.resp/redirect "/")
         (ring.resp/set-cookie cookie-name "true"))))
 
@@ -121,10 +143,11 @@
     "/" (serve-home cookies)
     "/login" (handle-login request-method request)
     "/logout" (handle-logout request-method request)
-    {:status "404"}))
+    {:status 404}))
 
 (defn start-server
   []
+  (logging/debug "Starting server")
   (run-jetty (-> handler
                  ring.cookies/wrap-cookies
                  ring.params/wrap-params
@@ -132,6 +155,7 @@
                  (ring.reload/wrap-reload {:dirs ["src" "test" "e2e"]}))
              {:ssl? true
               :ssl-port 3001
+              :port 3002
               :keystore "e2e/saml20_clj/e2e/keystore.jks"
               :key-password "testpassword"}))
 

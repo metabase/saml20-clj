@@ -2,7 +2,7 @@
   "Common validators for all SAML messages"
   (:require [saml20-clj.crypto :as crypto])
   (:import [org.opensaml.messaging.context InOutOperationContext MessageContext]
-           [org.opensaml.saml.saml2.core RequestAbstractType StatusResponseType]
+           [org.opensaml.saml.saml2.core RequestAbstractType StatusResponseType Response]
            org.opensaml.messaging.handler.impl.CheckExpectedIssuer
            org.opensaml.saml.common.AbstractSAMLObjectBuilder
            org.opensaml.saml.common.binding.security.impl.InResponseToSecurityHandler))
@@ -25,7 +25,7 @@
   (assert (seq request) "Must provide original request")
   (assert (not (nil? idp-cert)) "Must provide a credential for the idp")
   (try
-    (crypto/handle-signature-security msg-ctx request issuer idp-cert)
+    (crypto/handle-signature-security msg-ctx issuer idp-cert request)
     (catch org.opensaml.messaging.handler.MessageHandlerException e
       (throw (ex-info "Message failed to validate signature" {:validator :signature} e)))))
 
@@ -69,11 +69,20 @@
                        :incoming-request-id (.getInResponseTo ^StatusResponseType (.getMessage msg-ctx))}
                       e)))))
 
+(defn- maybe-get-assertions
+  [response]
+  (if (instance? Response response)
+    (.getAssertions ^Response response)
+    []))
+
 (defmethod validate-message :require-authenticated
   ;; Requires the response be signed either in the query params (HTTP-Redirect) in the
   ;; XML body (HTTP-Post), must run after signature validation
-  [_ ^MessageContext msg-ctx _]
-  (when-not (crypto/authenticated? msg-ctx)
-    (throw (ex-info "Message is not Authenticated"
-                    {:is-authenticated (crypto/authenticated? msg-ctx)
-                     :validator :require-authenticated}))))
+  [_ ^MessageContext msg-ctx {:keys [decrypted-response]}]
+  (when-not  (crypto/authenticated? msg-ctx)
+    (let [assertions (maybe-get-assertions decrypted-response)]
+      (when (or (empty? assertions)
+                (not (every? crypto/signed? assertions)))
+        (throw (ex-info "Message is not Authenticated"
+                        {:is-authenticated (crypto/authenticated? msg-ctx)
+                         :validator :require-authenticated}))))))

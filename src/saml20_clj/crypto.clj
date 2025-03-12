@@ -2,7 +2,6 @@
   (:require [saml20-clj.coerce :as coerce])
   (:import [org.opensaml.saml.common.messaging.context SAMLPeerEntityContext SAMLProtocolContext]
            [org.opensaml.security.credential BasicCredential Credential]
-           [org.opensaml.xmlsec.keyinfo.impl.provider DEREncodedKeyValueProvider DSAKeyValueProvider ECKeyValueProvider InlineX509DataProvider RSAKeyValueProvider]
            org.apache.xml.security.Init
            org.opensaml.messaging.context.MessageContext
            org.opensaml.saml.common.binding.security.impl.SAMLProtocolMessageXMLSignatureSecurityHandler
@@ -10,8 +9,8 @@
            org.opensaml.saml.saml2.binding.security.impl.SAML2HTTPRedirectDeflateSignatureSecurityHandler
            org.opensaml.saml.saml2.metadata.SPSSODescriptor
            org.opensaml.security.credential.impl.CollectionCredentialResolver
+           org.opensaml.xmlsec.config.impl.DefaultSecurityConfigurationBootstrap
            org.opensaml.xmlsec.context.SecurityParametersContext
-           org.opensaml.xmlsec.keyinfo.impl.BasicProviderKeyInfoCredentialResolver
            org.opensaml.xmlsec.signature.support.impl.ExplicitKeySignatureTrustEngine
            org.opensaml.xmlsec.SignatureValidationParameters))
 
@@ -64,6 +63,12 @@
   (when-let [object (coerce/->SAMLObject object)]
     (.getSignature object)))
 
+(defn signed?
+  "Returns true when an xml object has a top-level Signature Element"
+  [object]
+  (when-let [object (coerce/->SAMLObject object)]
+    (.isSigned object)))
+
 (defn assert-signature-valid-when-present
   "Attempts to validate any signatures in a SAML object. Raises if signature validation fails."
   [object credential]
@@ -85,12 +90,24 @@
                           e))))
       :valid)))
 
-(def ^:private basic-key-info-cred-resolver
-  (BasicProviderKeyInfoCredentialResolver. [(RSAKeyValueProvider.)
-                                            (DSAKeyValueProvider.)
-                                            (ECKeyValueProvider.)
-                                            (DEREncodedKeyValueProvider.)
-                                            (InlineX509DataProvider.)]))
+(defn- prepare-for-signature-validation
+  ^MessageContext [^MessageContext msg-ctx issuer credential]
+  (let [credential (doto ^BasicCredential (coerce/->Credential credential)
+                     (.setEntityId issuer))
+        sig-trust-engine (ExplicitKeySignatureTrustEngine.
+                          (CollectionCredentialResolver. [credential])
+                          (DefaultSecurityConfigurationBootstrap/buildBasicInlineKeyInfoCredentialResolver))
+        sig-val-parameters (doto (SignatureValidationParameters.)
+                             (.setSignatureTrustEngine sig-trust-engine))
+        ^SAMLPeerEntityContext peer-entity-ctx (.ensureSubcontext msg-ctx SAMLPeerEntityContext)
+        ^SAMLProtocolContext protocol-ctx (.ensureSubcontext msg-ctx SAMLProtocolContext)
+        ^SecurityParametersContext sec-params-ctx (.ensureSubcontext msg-ctx SecurityParametersContext)]
+    (doto peer-entity-ctx
+      (.setEntityId issuer)
+      (.setRole SPSSODescriptor/DEFAULT_ELEMENT_NAME))
+    (.setProtocol protocol-ctx SAMLConstants/SAML20P_NS)
+    (.setSignatureValidationParameters sec-params-ctx sig-val-parameters)
+    msg-ctx))
 
 (defn handle-signature-security
   "Uses OpenSAMLs security handlers to verify the signature of an incoming request for both
@@ -105,33 +122,19 @@
 
   It will return the message context if no sigature was provided but isAuthenticated will be
   false."
-  ^MessageContext [^MessageContext msg-ctx request issuer credential]
-  (let [credential (doto ^BasicCredential (coerce/->Credential credential)
-                     (.setEntityId issuer))
-        http-req-supplier (coerce/ring-request->HttpServletRequestSupplier request)
-        sig-trust-engine (ExplicitKeySignatureTrustEngine.
-                          (CollectionCredentialResolver. [credential])
-                          basic-key-info-cred-resolver)
-        sig-val-parameters (doto (SignatureValidationParameters.)
-                             (.setSignatureTrustEngine sig-trust-engine))
-        ^SAMLPeerEntityContext peer-entity-ctx (.ensureSubcontext msg-ctx SAMLPeerEntityContext)
-        ^SAMLProtocolContext protocol-ctx (.ensureSubcontext msg-ctx SAMLProtocolContext)
-        ^SecurityParametersContext sec-params-ctx (.ensureSubcontext msg-ctx SecurityParametersContext)]
-    (doto peer-entity-ctx
-      (.setEntityId issuer)
-      (.setRole SPSSODescriptor/DEFAULT_ELEMENT_NAME))
-    (.setProtocol protocol-ctx SAMLConstants/SAML20P_NS)
-    (.setSignatureValidationParameters sec-params-ctx sig-val-parameters)
+  ^MessageContext [^MessageContext msg-ctx issuer credential & [request]]
 
-    ;; if we have a GET request we are dealing with a redirect where the signature is the query parameters
-    ;; this uses a different security handler than POST requests where the signature is embedded in the
-    ;; XML Document
-    (if (= (:request-method request) :get)
+  ;; if we have a GET request we are dealing with a redirect where the signature is the query parameters
+  ;; this uses a different security handler than POST requests where the signature is embedded in the
+  ;; XML Document
+  (if (and request (= (:request-method request) :get))
+    (let [http-req-supplier (coerce/ring-request->HttpServletRequestSupplier request)]
       (doto (SAML2HTTPRedirectDeflateSignatureSecurityHandler.)
         (.setHttpServletRequestSupplier http-req-supplier)
         (.initialize)
-        (.invoke msg-ctx))
-      (doto (SAMLProtocolMessageXMLSignatureSecurityHandler.)
-        (.initialize)
-        (.invoke msg-ctx)))
-    msg-ctx))
+        (.invoke (prepare-for-signature-validation msg-ctx issuer credential))))
+    (doto (SAMLProtocolMessageXMLSignatureSecurityHandler.)
+      (.initialize)
+      (.invoke (prepare-for-signature-validation msg-ctx issuer credential))))
+
+  msg-ctx)

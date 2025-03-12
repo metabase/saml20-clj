@@ -174,6 +174,9 @@
   (or (= {:assertion-signed? true :assertion-encrypted? true} (dissoc response-map :response))
       ((some-fn :saml2-assertion? :no-namespace-assertion?) response-map)))
 
+(defn assertion-signed? [response-map]
+  ((some-fn :assertion-signed?) response-map))
+
 (defn message-signed? [response-map]
   ((some-fn :message-signed?) response-map))
 
