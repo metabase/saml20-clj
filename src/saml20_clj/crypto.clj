@@ -1,6 +1,7 @@
 (ns saml20-clj.crypto
   (:require [saml20-clj.coerce :as coerce])
-  (:import [org.opensaml.saml.common.messaging.context SAMLPeerEntityContext SAMLProtocolContext]
+  (:import [org.apache.xml.security.encryption XMLCipher]
+           [org.opensaml.saml.common.messaging.context SAMLPeerEntityContext SAMLProtocolContext]
            [org.opensaml.security.credential BasicCredential Credential]
            org.apache.xml.security.Init
            org.opensaml.messaging.context.MessageContext
@@ -25,10 +26,25 @@
                                         (coerce/->Credential (coerce/->PrivateKey credential))))]
     (some? (.getPrivateKey credential))))
 
-(defn- decrypt! [sp-private-key element]
+(defn- decrypt!
+  "Decrypt an encrypted XML element using Apache XMLCipher."
+  [sp-private-key element]
   (when-let [sp-private-key (coerce/->PrivateKey sp-private-key)]
-    (when-let [element (coerce/->Element element)]
-      (com.onelogin.saml2.util.Util/decryptElement element sp-private-key))))
+    (when-let [^org.w3c.dom.Element element (coerce/->Element element)]
+      (try
+        ;; Initialize XMLCipher for decryption - decrypt in place without replacing
+        (let [cipher (XMLCipher/getInstance)
+              _ (.init cipher XMLCipher/DECRYPT_MODE nil)
+              _ (.setKEK cipher sp-private-key)]
+          ;; This will decrypt and replace the EncryptedData with its decrypted content
+          (.doFinal cipher (.getOwnerDocument element) element))
+        (catch Exception e
+          (throw (ex-info "Failed to decrypt XML element"
+                          {:element (.getLocalName element)
+                           :namespace (.getNamespaceURI element)
+                           :key-type (type sp-private-key)
+                           :error-message (.getMessage e)}
+                          e)))))))
 
 (defn recursive-decrypt!
   "Mutates a SAML object to decrypt any encrypted Assertions present."
@@ -38,10 +54,10 @@
       (when (and (= (.getLocalName element) "EncryptedAssertion")
                  (= (.getNamespaceURI element) "urn:oasis:names:tc:SAML:2.0:assertion"))
         (decrypt! sp-private-key element))
-      (doseq [i     (range (.. element getChildNodes getLength))
+      (doseq [i (range (.. element getChildNodes getLength))
               ;; Explict typehinting here required by Cloverage
-              :let  [^org.w3c.dom.NodeList nodes (.getChildNodes element)
-                     child (.item nodes i)]
+              :let [^org.w3c.dom.NodeList nodes (.getChildNodes element)
+                    child (.item nodes i)]
               :when (instance? org.w3c.dom.Element child)]
         (recursive-decrypt! sp-private-key child)))))
 

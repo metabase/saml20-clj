@@ -12,8 +12,7 @@
 
 
 This is a SAML 2.0 Clojure library for SSO acting as a thin wrapper around the Java libraries [OpenSAML
-v4](https://wiki.shibboleth.net/confluence/display/OS30/Home) and some utility functions from [OneLogin's SAML
-library](https://github.com/onelogin/java-saml) This library allows a Clojure application to act as a Service Provider
+v5](https://wiki.shibboleth.net/confluence/display/OS30/Home). This library allows a Clojure application to act as a Service Provider
 (SP).
 
 ## 4.0.0 Usage
