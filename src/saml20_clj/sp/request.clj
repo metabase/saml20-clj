@@ -2,6 +2,7 @@
    (:require [clojure.string :as str]
              [java-time.api :as t]
              [saml20-clj.coerce :as coerce]
+             [saml20-clj.sp.servlet :as servlet]
              [saml20-clj.state :as state])
    (:import [org.opensaml.saml.common.messaging.context SAMLBindingContext SAMLEndpointContext SAMLPeerEntityContext]
             [org.opensaml.saml.saml2.core AuthnRequest LogoutRequest NameIDType]
@@ -88,23 +89,9 @@
       (state/record-request! state-manager (.getID request)))
     (setup-message-context request credential sig-alg idp-url)))
 
-(defn- map-making-servlet
-  "Implements a minimum HttpServletResponse for HTTPRedirectDeflateEncoder"
-  []
-  (let [response (atom {:status 302 :body "" :headers {}})
-        servlet-wrapper (reify jakarta.servlet.http.HttpServletResponse
-                          (setHeader [_this name value]
-                            (swap! response update :headers assoc name value))
-                          (^void setCharacterEncoding [_ ^String _])
-                          (sendRedirect [this redirect]
-                            (.setHeader this "location" redirect)))
-        wrapper-supplier (reify net.shibboleth.shared.primitive.NonnullSupplier
-                           (get [_] servlet-wrapper))]
-    [wrapper-supplier #(deref response)]))
-
 (defn- redirect-response
   [^MessageContext saml-request relay-state]
-  (let [[servlet ->ring-request] (map-making-servlet)
+  (let [[servlet ->ring-request] (servlet/map-making-servlet)
         ^SAMLBindingContext binding-context (.getSubcontext saml-request SAMLBindingContext true)]
     ;; set the relay state
     (.setRelayState binding-context relay-state)
@@ -155,10 +142,10 @@
            ;; protocol binding specifying if IdP should use HTTP-Post or HTTP-Redirect to respond
            protocol-binding
            instant]
-    :or   {instant (t/instant)
-           request-id (random-request-id)
-           sig-alg -sig-alg
-           protocol-binding :redirect}}]
+    :or {instant (t/instant)
+         request-id (random-request-id)
+         sig-alg -sig-alg
+         protocol-binding :redirect}}]
   (assert (non-blank-string? acs-url) "acs-url is required")
   (assert (non-blank-string? idp-url) "idp-url is required")
   (assert (non-blank-string? sp-name) "sp-name is required")
