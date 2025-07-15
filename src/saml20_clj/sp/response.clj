@@ -62,6 +62,10 @@
 (defn- assertion->subject-confirmation-datas [assertion]
   (map subject-data (-> assertion subject subject-confirmations)))
 
+(def ^:private default-clock-skew-seconds
+  "Default allowable clock skew in seconds (3 minutes)."
+  180)
+
 (defmacro validate-confirmation-datas
   "Extracts an instance of `SubjectConfirmationData` from `assertion` and binds it to `data-binding`, then executes
   body."
@@ -105,7 +109,7 @@
 ;; clock skew between the providers
 (defmethod validate-assertion :not-on-or-after
   [_ assertion {:keys [allowable-clock-skew-seconds]
-                :or   {allowable-clock-skew-seconds com.onelogin.saml2.util.Constants/ALOWED_CLOCK_DRIFT}}]
+                :or {allowable-clock-skew-seconds default-clock-skew-seconds}}]
   (validate-confirmation-datas [data assertion]
     (let [not-on-or-after (some-> (.getNotOnOrAfter data) t/instant)]
       (when-not not-on-or-after
@@ -121,7 +125,7 @@
 
 (defmethod validate-assertion :not-before
   [_ assertion {:keys [allowable-clock-skew-seconds]
-                :or   {allowable-clock-skew-seconds com.onelogin.saml2.util.Constants/ALOWED_CLOCK_DRIFT}}]
+                :or {allowable-clock-skew-seconds default-clock-skew-seconds}}]
   (validate-confirmation-datas [data assertion]
     (when-let [not-before (some-> (.getNotBefore data) t/instant)]
       (when (t/before? (t/plus (t/instant) (t/seconds allowable-clock-skew-seconds))
