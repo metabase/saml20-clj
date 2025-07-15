@@ -17,7 +17,7 @@
   org.opensaml/opensaml-xmlsec-impl    {:mvn/version "5.1.3"}
   potemkin/potemkin                    {:mvn/version "0.4.7"}
   pretty/pretty                        {:mvn/version "1.0.5"}
-  ring/ring-codec                      {:mvn/version "1.2.0"}
+  ring/ring-codec                      {:mvn/version "1.3.0"}
   jakarta.servlet/jakarta.servlet-api  {:mvn/version "6.1.0"}}
 
  :aliases
@@ -28,9 +28,9 @@
                  org.clojure/tools.logging                  {:mvn/version "1.3.0"}
                  org.apache.logging.log4j/log4j-core        {:mvn/version "2.24.3"}
                  org.apache.logging.log4j/log4j-slf4j2-impl {:mvn/version "2.24.3"}
-                 ring/ring                                  {:mvn/version "1.13.0"}
+                 ring/ring                                  {:mvn/version "1.14.2"}
                  etaoin/etaoin                              {:mvn/version "1.1.42"}
-                 ring/ring-jetty-adapter                    {:mvn/version "1.13.0"}}
+                 ring/ring-jetty-adapter                    {:mvn/version "1.14.2"}}
    :extra-paths ["test" "e2e"]}
 
   ;; clojure -X:dev:test
@@ -59,7 +59,10 @@
                                   :unused-locals]
                 :exclude-linters [:deprecations
                                   :unused-ret-vals
-                                  :implicit-dependencies]}}
+                                  :implicit-dependencies]
+                ;; Suppressing these warnings because it is a bug with eastwood and proxy
+                ;; https://github.com/jonase/eastwood/issues/16
+                :ignored-faults {:unused-fn-args {saml20-clj.sp.servlet true}}}}
 
   ;; clojure -X:dev:cloverage
   :cloverage
@@ -94,6 +97,13 @@
 
   :include-license
   {:extra-paths ["license"]}
+
+  ;; Start a Network REPL (nrepl) that you can connect your editor to.
+  ;;
+  ;; clojure -M:dev:nrepl (etc.)
+  :nrepl
+  {:extra-deps {nrepl/nrepl {:mvn/version "1.3.1"}}
+   :main-opts  ["-m" "nrepl.cmdline" "-p" "50605"]}
 
   ;; clojure -T:build build
   ;; clojure -T:build deploy
