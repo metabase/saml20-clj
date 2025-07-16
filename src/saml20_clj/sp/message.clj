@@ -2,7 +2,7 @@
   "Common validators for all SAML messages"
   (:require [saml20-clj.crypto :as crypto])
   (:import [org.opensaml.messaging.context InOutOperationContext MessageContext]
-           [org.opensaml.saml.saml2.core RequestAbstractType StatusResponseType Response]
+           [org.opensaml.saml.saml2.core RequestAbstractType StatusResponseType Response StatusCode]
            org.opensaml.messaging.handler.impl.CheckExpectedIssuer
            org.opensaml.saml.common.AbstractSAMLObjectBuilder
            org.opensaml.saml.common.binding.security.impl.InResponseToSecurityHandler))
@@ -79,10 +79,25 @@
   ;; Requires the response be signed either in the query params (HTTP-Redirect) in the
   ;; XML body (HTTP-Post), must run after signature validation
   [_ ^MessageContext msg-ctx {:keys [decrypted-response]}]
-  (when-not  (crypto/authenticated? msg-ctx)
+  (when-not (crypto/authenticated? msg-ctx)
     (let [assertions (maybe-get-assertions decrypted-response)]
       (when (or (empty? assertions)
                 (not (every? crypto/signed? assertions)))
         (throw (ex-info "Message is not Authenticated"
                         {:is-authenticated (crypto/authenticated? msg-ctx)
                          :validator :require-authenticated}))))))
+
+(defmethod validate-message :status-code
+  [_ ^MessageContext msg-ctx _]
+  (when-let [response (.getMessage msg-ctx)]
+    (when (instance? StatusResponseType response)
+      (let [status (.getStatus ^StatusResponseType response)
+            status-code (when status (.getStatusCode status))
+            code-value (when status-code (.getValue status-code))]
+        (when-not (= code-value StatusCode/SUCCESS)
+          (let [status-message (when status (.getStatusMessage status))
+                secondary-code (when status-code (.getStatusCode status-code))]
+            (throw (ex-info "SAML response contains non-success status"
+                            {:status-code code-value
+                             :status-message (when status-message (.getValue status-message))
+                             :secondary-status-code (when secondary-code (.getValue secondary-code))}))))))))

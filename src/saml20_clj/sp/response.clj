@@ -6,9 +6,11 @@
             [saml20-clj.crypto :as crypto]
             [saml20-clj.sp.message :as message]
             [saml20-clj.state :as state]
+            [saml20-clj.validation-errors :as errors]
             [saml20-clj.xml :as xml])
   (:import [org.opensaml.saml.saml2.core Assertion Attribute AttributeStatement Audience AudienceRestriction Response
-            Subject SubjectConfirmation SubjectConfirmationData]
+            Subject SubjectConfirmation SubjectConfirmationData AuthnStatement AuthnContext
+            Conditions OneTimeUse ProxyRestriction StatusCode]
            org.opensaml.messaging.context.MessageContext
            org.opensaml.saml.saml2.core.impl.AuthnRequestBuilder))
 
@@ -27,7 +29,7 @@
   (when-let [response (coerce/->Response response)]
     (if (empty? (.getEncryptedAssertions response))
       response
-      (let [clone   (clone-response response)
+      (let [clone (clone-response response)
             element (.getDOM clone)]
         (crypto/recursive-decrypt! sp-private-key element)
         (coerce/->Response element)))))
@@ -35,10 +37,10 @@
 (defmethod message/validate-message :require-encryption
   [_ ^MessageContext msg-ctx _]
   (when-let [response (coerce/->Response msg-ctx)]
-    (let [num-assertions           (count (.getAssertions response))
+    (let [num-assertions (count (.getAssertions response))
           num-encrypted-assertions (count (.getEncryptedAssertions response))]
       (when (> num-assertions num-encrypted-assertions)
-        (throw (ex-info "Unencrypted assertions present in response body" {}))))))
+        (throw (errors/validation-error :encryption-required response {}))))))
 
 (defn- opensaml-assertions
   [response]
@@ -82,86 +84,86 @@
   (try
     (crypto/assert-signature-valid-when-present assertion idp-cert)
     (catch Throwable e
-      (throw (ex-info "Invalid <Assertion> signature(s)" {} e)))))
+      (throw (errors/validation-error :signature-validation assertion {:idp-cert idp-cert} e)))))
 
 ;; Verify that the `Recipient` attribute in any bearer `<SubjectConfirmationData>` matches the assertion consumer
 ;; service URL to which the `<Response>` or artifact was delivered.
 (defmethod validate-assertion :recipient
   [_ assertion {:keys [acs-url]}]
   (validate-confirmation-datas [data assertion]
-    (let [recipient (.getRecipient data)]
+                               (let [recipient (.getRecipient data)]
     ;; Recipient field is REQUIRED if <SubjectConfirmationData> is present.
-      (when-not recipient
-        (throw (ex-info "<SubjectConfirmationData> does not contain a Recipient"
-                        {:data (coerce/->xml-string data)})))
-      (when-not acs-url
-        (throw (ex-info "<SubjectConfirmationData> contains a Recipient but an acs-url was not passed to validate against"
-                        {:data (coerce/->xml-string data)})))
-      (when-not (= recipient acs-url)
-        (throw (ex-info "<SubjectConfirmationData> Recipient does not match assertion consumer service URL"
-                        {:data (coerce/->xml-string data), :acs-url acs-url}))))))
+                                 (when-not recipient
+                                   (throw (ex-info "<SubjectConfirmationData> does not contain a Recipient"
+                                                   {:data (coerce/->xml-string data)})))
+                                 (when-not acs-url
+                                   (throw (ex-info "<SubjectConfirmationData> contains a Recipient but an acs-url was not passed to validate against"
+                                                   {:data (coerce/->xml-string data)})))
+                                 (when-not (= recipient acs-url)
+                                   (throw (ex-info "<SubjectConfirmationData> Recipient does not match assertion consumer service URL"
+                                                   {:data (coerce/->xml-string data), :acs-url acs-url}))))))
 
 ;; Verify that the NotOnOrAfter attribute in any bearer <SubjectConfirmationData> has not passed, subject to allowable
 ;; clock skew between the providers
 (defmethod validate-assertion :not-on-or-after
   [_ assertion {:keys [allowable-clock-skew-seconds]
-                :or   {allowable-clock-skew-seconds com.onelogin.saml2.util.Constants/ALOWED_CLOCK_DRIFT}}]
+                :or {allowable-clock-skew-seconds com.onelogin.saml2.util.Constants/ALOWED_CLOCK_DRIFT}}]
   (validate-confirmation-datas [data assertion]
-    (let [not-on-or-after (some-> (.getNotOnOrAfter data) t/instant)]
-      (when-not not-on-or-after
-        (throw (ex-info "<SubjectConfirmationData> does not contain NotOnOrAfter"
-                        {:data (coerce/->xml-string data)})))
-      (when (t/after? (t/minus (t/instant) (t/seconds allowable-clock-skew-seconds))
-                      not-on-or-after)
-        (throw (ex-info "<SubjectConfirmationData> NotOnOrAfter has passed"
-                        {:data                         (coerce/->xml-string data)
-                         :not-on-or-after              not-on-or-after
-                         :now                          (t/instant)
-                         :allowable-clock-skew-seconds allowable-clock-skew-seconds}))))))
+                               (let [not-on-or-after (some-> (.getNotOnOrAfter data) t/instant)]
+                                 (when-not not-on-or-after
+                                   (throw (ex-info "<SubjectConfirmationData> does not contain NotOnOrAfter"
+                                                   {:data (coerce/->xml-string data)})))
+                                 (when (t/after? (t/minus (t/instant) (t/seconds allowable-clock-skew-seconds))
+                                                 not-on-or-after)
+                                   (throw (ex-info "<SubjectConfirmationData> NotOnOrAfter has passed"
+                                                   {:data (coerce/->xml-string data)
+                                                    :not-on-or-after not-on-or-after
+                                                    :now (t/instant)
+                                                    :allowable-clock-skew-seconds allowable-clock-skew-seconds}))))))
 
 (defmethod validate-assertion :not-before
   [_ assertion {:keys [allowable-clock-skew-seconds]
-                :or   {allowable-clock-skew-seconds com.onelogin.saml2.util.Constants/ALOWED_CLOCK_DRIFT}}]
+                :or {allowable-clock-skew-seconds com.onelogin.saml2.util.Constants/ALOWED_CLOCK_DRIFT}}]
   (validate-confirmation-datas [data assertion]
-    (when-let [not-before (some-> (.getNotBefore data) t/instant)]
-      (when (t/before? (t/plus (t/instant) (t/seconds allowable-clock-skew-seconds))
-                       not-before)
-        (throw (ex-info "<SubjectConfirmationData> NotBefore is in the future"
-                        {:data                         (coerce/->xml-string data)
-                         :not-before                   not-before
-                         :now                          (t/instant)
-                         :allowable-clock-skew-seconds allowable-clock-skew-seconds}))))))
+                               (when-let [not-before (some-> (.getNotBefore data) t/instant)]
+                                 (when (t/before? (t/plus (t/instant) (t/seconds allowable-clock-skew-seconds))
+                                                  not-before)
+                                   (throw (ex-info "<SubjectConfirmationData> NotBefore is in the future"
+                                                   {:data (coerce/->xml-string data)
+                                                    :not-before not-before
+                                                    :now (t/instant)
+                                                    :allowable-clock-skew-seconds allowable-clock-skew-seconds}))))))
 
 (defmethod validate-assertion :in-response-to
   [_ assertion {:keys [request-id solicited?]
-                :or   {solicited? true}}]
+                :or {solicited? true}}]
   (when (or request-id
             (not solicited?))
     (validate-confirmation-datas [data assertion]
-      (let [in-response-to (.getInResponseTo data)]
-        (when-not in-response-to
-          (throw (ex-info "<SubjectConfirmationData> does not contain InResponseTo"
-                          {:data (coerce/->xml-string data)})))
-        (if solicited?
-          (when (not= in-response-to request-id)
-            (throw (ex-info "<SubjectConfirmationData> InResponseTo does not match request-id"
-                            {:data       (coerce/->xml-string data)
-                             :request-id request-id})))
-          (when in-response-to
-            (throw (ex-info "<SubjectConfirmationData> InResponseTo should not be present for an unsolicited request"
-                            {:data       (coerce/->xml-string data)
-                             :request-id request-id}))))))))
+                                 (let [in-response-to (.getInResponseTo data)]
+                                   (when-not in-response-to
+                                     (throw (ex-info "<SubjectConfirmationData> does not contain InResponseTo"
+                                                     {:data (coerce/->xml-string data)})))
+                                   (if solicited?
+                                     (when (not= in-response-to request-id)
+                                       (throw (ex-info "<SubjectConfirmationData> InResponseTo does not match request-id"
+                                                       {:data (coerce/->xml-string data)
+                                                        :request-id request-id})))
+                                     (when in-response-to
+                                       (throw (ex-info "<SubjectConfirmationData> InResponseTo should not be present for an unsolicited request"
+                                                       {:data (coerce/->xml-string data)
+                                                        :request-id request-id}))))))))
 
 ;; verifying the Address attribute is optional.
 (defmethod validate-assertion :address
   [_ assertion {:keys [user-agent-address]}]
   (when user-agent-address
     (validate-confirmation-datas [data assertion]
-      (when-let [address (.getAddress data)]
-        (when-not (= address user-agent-address)
-          (throw (ex-info "<SubjectConfirmationData> Address does not match user-agent-address"
-                          {:data       (coerce/->xml-string data)
-                           :request-id user-agent-address})))))))
+                                 (when-let [address (.getAddress data)]
+                                   (when-not (= address user-agent-address)
+                                     (throw (ex-info "<SubjectConfirmationData> Address does not match user-agent-address"
+                                                     {:data (coerce/->xml-string data)
+                                                      :request-id user-agent-address})))))))
 
 ;; for Assertions:
 ;;
@@ -178,18 +180,131 @@
       (when-not (= issuer assertion-issuer)
         (throw (ex-info "Incorrect Assertion <Issuer>" {}))))))
 
+(defmethod validate-assertion :audience-restriction
+  [_ ^Assertion assertion {:keys [issuer]}]
+  (when issuer
+    (let [conditions (.getConditions assertion)]
+      (when conditions
+        (let [audience-restrictions (.getAudienceRestrictions conditions)
+              valid-audience? (some (fn [^AudienceRestriction restriction]
+                                      (some (fn [^Audience audience]
+                                              (= issuer (.getValue audience)))
+                                            (.getAudiences restriction)))
+                                    audience-restrictions)]
+          (when-not valid-audience?
+            (throw (ex-info "Assertion audience restriction validation failed"
+                            {:expected-audience issuer
+                             :actual-audiences (mapv (fn [^AudienceRestriction restriction]
+                                                       (mapv #(.getValue ^Audience %)
+                                                             (.getAudiences restriction)))
+                                                     audience-restrictions)}))))))))
+
+(defmethod validate-assertion :authn-statement
+  [_ ^Assertion assertion {:keys [max-session-age-seconds]
+                           :or {max-session-age-seconds 86400}}]
+  (let [authn-statements (.getAuthnStatements assertion)]
+    (when (empty? authn-statements)
+      (throw (ex-info "Assertion must contain at least one AuthnStatement"
+                      {:assertion-id (.getID assertion)})))
+    (doseq [^AuthnStatement authn-stmt authn-statements]
+      (when-let [authn-instant (.getAuthnInstant authn-stmt)]
+        (let [age-seconds (t/as (t/duration (t/instant authn-instant) (t/instant)) :seconds)]
+          (when (> age-seconds max-session-age-seconds)
+            (throw (ex-info "AuthnStatement session has exceeded maximum age"
+                            {:authn-instant authn-instant
+                             :age-seconds age-seconds
+                             :max-session-age-seconds max-session-age-seconds}))))))))
+
+(defmethod validate-assertion :subject-confirmation-method
+  [_ ^Assertion assertion _]
+  (let [subject (.getSubject assertion)]
+    (when subject
+      (let [confirmations (.getSubjectConfirmations subject)
+            valid-method? (some #(= "urn:oasis:names:tc:SAML:2.0:cm:bearer"
+                                    (.getMethod ^SubjectConfirmation %))
+                                confirmations)]
+        (when-not valid-method?
+          (throw (ex-info "No valid bearer SubjectConfirmation method found"
+                          {:methods (map #(.getMethod ^SubjectConfirmation %) confirmations)})))))))
+
+(defmethod validate-assertion :conditions
+  [_ ^Assertion assertion {:keys [allowable-clock-skew-seconds]
+                           :or {allowable-clock-skew-seconds com.onelogin.saml2.util.Constants/ALOWED_CLOCK_DRIFT}}]
+  (when-let [conditions (.getConditions assertion)]
+    (let [now (t/instant)
+          not-before (some-> (.getNotBefore conditions) t/instant)
+          not-on-or-after (some-> (.getNotOnOrAfter conditions) t/instant)]
+      (when not-before
+        (when (t/before? (t/plus now (t/seconds allowable-clock-skew-seconds)) not-before)
+          (throw (ex-info "Conditions NotBefore is in the future"
+                          {:not-before not-before
+                           :now now
+                           :allowable-clock-skew-seconds allowable-clock-skew-seconds}))))
+      (when not-on-or-after
+        (when (t/after? (t/minus now (t/seconds allowable-clock-skew-seconds)) not-on-or-after)
+          (throw (ex-info "Conditions NotOnOrAfter has passed"
+                          {:not-on-or-after not-on-or-after
+                           :now now
+                           :allowable-clock-skew-seconds allowable-clock-skew-seconds})))))))
+
+(defmethod validate-assertion :one-time-use
+  [_ ^Assertion assertion {:keys [state-manager]}]
+  (when-let [conditions (.getConditions assertion)]
+    (let [one-time-use-conditions (.getOneTimeUses ^Conditions conditions)]
+      (when (seq one-time-use-conditions)
+        (when-not state-manager
+          (throw (ex-info "OneTimeUse condition present but no state manager configured"
+                          {:assertion-id (.getID assertion)})))
+        (let [assertion-id (.getID assertion)]
+          (when-not (state/accept-assertion! state-manager assertion-id)
+            (throw (ex-info "Assertion has already been used (OneTimeUse violation)"
+                            {:assertion-id assertion-id}))))))))
+
+(defmethod validate-assertion :proxy-restriction
+  [_ ^Assertion assertion _]
+  (when-let [conditions (.getConditions assertion)]
+    (let [proxy-restrictions (.getProxyRestrictions ^Conditions conditions)]
+      (doseq [^ProxyRestriction restriction proxy-restrictions]
+        (let [proxy-count (.getProxyCount restriction)]
+          (when (and proxy-count (zero? proxy-count))
+            (throw (ex-info "ProxyRestriction violation: assertion cannot be proxied"
+                            {:proxy-count proxy-count}))))))))
+
 (def ^:private default-validation-options
-  {:response-validators  [:signature
-                          :issuer
-                          :in-response-to
-                          :require-authenticated]
+  {:response-validators [:signature
+                         :issuer
+                         :in-response-to
+                         :require-authenticated
+                         :status-code]
    :assertion-validators [:signature
                           :recipient
                           :not-on-or-after
                           :not-before
                           :in-response-to
                           :address
-                          :issuer]})
+                          :issuer
+                          :audience-restriction
+                          :subject-confirmation-method
+                          :conditions]})
+
+(def ^:private web-browser-sso-validations
+  "Standard validations for SAML 2.0 Web Browser SSO Profile"
+  {:response-validators [:signature :issuer :in-response-to :status-code :require-authenticated]
+   :assertion-validators [:signature :recipient :not-on-or-after :not-before
+                          :audience-restriction :subject-confirmation-method
+                          :authn-statement :conditions]})
+
+(def ^:private sp-initiated-validations
+  "Validations for SP-initiated Web Browser SSO flow"
+  (assoc web-browser-sso-validations
+         :assertion-validators (conj (:assertion-validators web-browser-sso-validations)
+                                     :in-response-to)))
+
+(def ^:private idp-initiated-validations
+  "Validations for IdP-initiated Web Browser SSO flow"
+  (assoc web-browser-sso-validations
+         :assertion-validators (remove #{:in-response-to}
+                                       (:assertion-validators web-browser-sso-validations))))
 
 (defn validate-response
   "Validate response. Returns decrypted response if valid. Options:
@@ -236,11 +351,11 @@
                            :sp-private-key sp-private-key}))
 
   (^Response [req options]
-   (let [options                      (-> (merge default-validation-options options)
-                                          (assoc :request req :request-builder (AuthnRequestBuilder.)))
+   (let [options (-> (merge default-validation-options options)
+                     (assoc :request req :request-builder (AuthnRequestBuilder.)))
          {:keys [response-validators
                  assertion-validators
-                 sp-private-key]}     options]
+                 sp-private-key]} options]
      (when-let [msg-ctx (coerce/ring-request->MessageContext req)]
 
        (let [decrypted-response (cond-> (coerce/->Response msg-ctx)
@@ -254,6 +369,20 @@
          (when-let [state-manager (:state-manager options)]
            (state/accept-response! state-manager (.getInResponseTo decrypted-response)))
          decrypted-response)))))
+
+(defn validate-response-for-profile
+  "Validate response according to a specific SAML profile. Profiles:
+   - :sp-initiated - SP-initiated Web Browser SSO flow (requires InResponseTo)
+   - :idp-initiated - IdP-initiated Web Browser SSO flow (no InResponseTo required)
+   - :default - Standard Web Browser SSO validations"
+  [response profile options]
+  (let [profile-config (case profile
+                         :sp-initiated sp-initiated-validations
+                         :idp-initiated idp-initiated-validations
+                         :default web-browser-sso-validations
+                         web-browser-sso-validations)
+        enhanced-options (merge options profile-config)]
+    (validate-response response enhanced-options)))
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                        Convenient Clojurey Map Util Fns                                        |
@@ -270,11 +399,11 @@
   (when-let [response (coerce/->Response response)]
     (let [status (.. response getStatus getStatusCode getValue)]
       {:in-response-to (.getInResponseTo response)
-       :status         status
-       :success?       (= status org.opensaml.saml.saml2.core.StatusCode/SUCCESS)
-       :version        (.. response getVersion toString)
-       :issue-instant  (t/instant (.getIssueInstant response))
-       :destination    (.getDestination response)})))
+       :status status
+       :success? (= status org.opensaml.saml.saml2.core.StatusCode/SUCCESS)
+       :version (.. response getVersion toString)
+       :issue-instant (t/instant (.getIssueInstant response))
+       :destination (.getDestination response)})))
 
 ;; https://www.purdue.edu/apps/account/docs/Shibboleth/Shibboleth_information.jsp
 ;;  Or
@@ -282,20 +411,20 @@
 (def ^:private -saml2-attr->name {"urn:oid:0.9.2342.19200300.100.1.1" "uid"
                                   "urn:oid:0.9.2342.19200300.100.1.3" "mail"
                                   "urn:oid:2.16.840.1.113730.3.1.241" "displayName"
-                                  "urn:oid:2.5.4.3"                   "cn"
-                                  "urn:oid:2.5.4.4"                   "sn"
-                                  "urn:oid:2.5.4.12"                  "title"
-                                  "urn:oid:2.5.4.20"                  "phone"
-                                  "urn:oid:2.5.4.42"                  "givenName"
-                                  "urn:oid:2.5.6.8"                   "organizationalRole"
-                                  "urn:oid:2.16.840.1.113730.3.1.3"   "employeeNumber"
-                                  "urn:oid:2.16.840.1.113730.3.1.4"   "employeeType"
-                                  "urn:oid:1.3.6.1.4.1.5923.1.1.1.1"  "eduPersonAffiliation"
-                                  "urn:oid:1.3.6.1.4.1.5923.1.1.1.2"  "eduPersonNickname"
-                                  "urn:oid:1.3.6.1.4.1.5923.1.1.1.6"  "eduPersonPrincipalName"
-                                  "urn:oid:1.3.6.1.4.1.5923.1.1.1.9"  "eduPersonScopedAffiliation"
+                                  "urn:oid:2.5.4.3" "cn"
+                                  "urn:oid:2.5.4.4" "sn"
+                                  "urn:oid:2.5.4.12" "title"
+                                  "urn:oid:2.5.4.20" "phone"
+                                  "urn:oid:2.5.4.42" "givenName"
+                                  "urn:oid:2.5.6.8" "organizationalRole"
+                                  "urn:oid:2.16.840.1.113730.3.1.3" "employeeNumber"
+                                  "urn:oid:2.16.840.1.113730.3.1.4" "employeeType"
+                                  "urn:oid:1.3.6.1.4.1.5923.1.1.1.1" "eduPersonAffiliation"
+                                  "urn:oid:1.3.6.1.4.1.5923.1.1.1.2" "eduPersonNickname"
+                                  "urn:oid:1.3.6.1.4.1.5923.1.1.1.6" "eduPersonPrincipalName"
+                                  "urn:oid:1.3.6.1.4.1.5923.1.1.1.9" "eduPersonScopedAffiliation"
                                   "urn:oid:1.3.6.1.4.1.5923.1.1.1.10" "eduPersonTargetedID"
-                                  "urn:oid:1.3.6.1.4.1.5923.1.6.1.1"  "eduCourseOffering"})
+                                  "urn:oid:1.3.6.1.4.1.5923.1.6.1.1" "eduCourseOffering"})
 
 (defn- saml2-attr->name [attr-oid]
   (get -saml2-attr->name attr-oid attr-oid))
@@ -306,28 +435,28 @@
   "Returns the attributes and the 'audiences' for the given SAML assertion"
   [^Assertion assertion]
   (when assertion
-    (let [statements   (.getAttributeStatements assertion)
-          subject      (.getSubject assertion)
+    (let [statements (.getAttributeStatements assertion)
+          subject (.getSubject assertion)
           subject-data (.getSubjectConfirmationData ^SubjectConfirmation (first (.getSubjectConfirmations subject)))
-          name-id      (.getNameID subject)
-          attrs        (->> (for [^AttributeStatement statement statements
-                                  ^Attribute attribute          (.getAttributes statement)]
-                              {(saml2-attr->name (.getName attribute)) ; Or (.getFriendlyName a) ??
-                               (map #(-> ^org.opensaml.core.xml.XMLObject % .getDOM .getTextContent)
-                                    (.getAttributeValues attribute))})
-                            (apply (partial merge-with concat)))
-          audiences    (for [^AudienceRestriction restriction (.. assertion getConditions getAudienceRestrictions)
-                             ^Audience audience               (.getAudiences restriction)]
-                         (.getURI audience))]
-      {:attrs        attrs
-       :audiences    audiences
-       :name-id      {:value  (some-> name-id .getValue)
-                      :format (some-> name-id .getFormat)}
-       :confirmation {:in-response-to  (.getInResponseTo subject-data)
-                      :not-before      (some-> (.getNotBefore subject-data) (t/instant))
+          name-id (.getNameID subject)
+          attrs (->> (for [^AttributeStatement statement statements
+                           ^Attribute attribute (.getAttributes statement)]
+                       {(saml2-attr->name (.getName attribute)) ; Or (.getFriendlyName a) ??
+                        (map #(-> ^org.opensaml.core.xml.XMLObject % .getDOM .getTextContent)
+                             (.getAttributeValues attribute))})
+                     (apply (partial merge-with concat)))
+          audiences (for [^AudienceRestriction restriction (.. assertion getConditions getAudienceRestrictions)
+                          ^Audience audience (.getAudiences restriction)]
+                      (.getURI audience))]
+      {:attrs attrs
+       :audiences audiences
+       :name-id {:value (some-> name-id .getValue)
+                 :format (some-> name-id .getFormat)}
+       :confirmation {:in-response-to (.getInResponseTo subject-data)
+                      :not-before (some-> (.getNotBefore subject-data) (t/instant))
                       :not-on-or-after (t/instant (.getNotOnOrAfter subject-data))
-                      :address         (.getAddress subject-data)
-                      :recipient       (.getRecipient subject-data)}})))
+                      :address (.getAddress subject-data)
+                      :recipient (.getRecipient subject-data)}})))
 
 (defn assertions
   "Returns the assertions (encrypted or not) of a SAML Response object"

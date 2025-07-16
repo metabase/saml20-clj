@@ -14,13 +14,13 @@
         (state/record-request! m 1)
         (state/record-request! m 2)
         (is (= [[(t/instant "2020-09-25T08:00:00Z") #{1 2}]]
-               @m))))
+               (:requests @m)))))
     (testing "Move forward to t+1 minute"
       (t/with-clock (t/mock-clock (t/instant "2020-09-25T08:01:00.000Z"))
         (testing "consume one of the IDs"
           (state/accept-response! m 2)
           (is (= [[(t/instant "2020-09-25T08:00:00Z") #{1}]]
-                 @m)))
+                 (:requests @m))))
         (testing "trying to consume the ID a second time should throw an Exception"
           (is (thrown-with-msg?
                clojure.lang.ExceptionInfo
@@ -30,7 +30,7 @@
           (state/record-request! m 3)
           (state/record-request! m 4)
           (is (= [[(t/instant "2020-09-25T08:00:00Z") #{1 3 4}]]
-                 @m)))))
+                 (:requests @m))))))
     (testing "Move forward to t+3 minutes"
       (t/with-clock (t/mock-clock (t/instant "2020-09-25T08:03:00.000Z"))
         (testing "Add an ID. Buckets should get rotated"
@@ -38,13 +38,13 @@
           (is (= [[(t/instant "2020-09-25T08:03:00.000Z") #{5}]
                   [(t/instant "2020-09-25T08:00:00Z") #{1 3 4}]
                   nil]
-                 @m)))
+                 (:requests @m))))
         (testing "Should be able to consume ID in other bucket"
           (state/accept-response! m 3)
           (is (= [[(t/instant "2020-09-25T08:03:00.000Z") #{5}]
                   [(t/instant "2020-09-25T08:00:00Z") #{1 4}]
                   nil]
-                 @m)))))
+                 (:requests @m))))))
     (testing "Move forward to t+6 minutes"
       (t/with-clock (t/mock-clock (t/instant "2020-09-25T08:06:00.000Z"))
         (testing "Consume an ID. Buckets should get rotated"
@@ -52,14 +52,14 @@
           (is (= [[(t/instant "2020-09-25T08:06:00.000Z") #{}]
                   [(t/instant "2020-09-25T08:03:00.000Z") #{5}]
                   [(t/instant "2020-09-25T08:00:00Z") #{4}]]
-                 @m)))
+                 (:requests @m))))
         (testing "Add some more IDs"
           (state/record-request! m 6)
           (state/record-request! m 7)
           (is (= [[(t/instant "2020-09-25T08:06:00.000Z") #{6 7}]
                   [(t/instant "2020-09-25T08:03:00.000Z") #{5}]
                   [(t/instant "2020-09-25T08:00:00Z") #{4}]]
-                 @m)))))
+                 (:requests @m))))))
     (testing "Move forward to t+9 minutes"
       (t/with-clock (t/mock-clock (t/instant "2020-09-25T08:09:00.000Z"))
         (testing "Attempt to consume now-ancient ID"
@@ -71,28 +71,28 @@
           (is (= [[(t/instant "2020-09-25T08:06:00.000Z") #{6 7}]
                   [(t/instant "2020-09-25T08:03:00.000Z") #{5}]
                   [(t/instant "2020-09-25T08:00:00Z") #{4}]]
-                 @m)))
+                 (:requests @m))))
         (testing "adding a new ID will cause the old bucket to get dropped"
           (state/record-request! m 8)
           (is (= [[(t/instant "2020-09-25T08:09:00.000Z") #{8}]
                   [(t/instant "2020-09-25T08:06:00.000Z") #{6 7}]
                   [(t/instant "2020-09-25T08:03:00.000Z") #{5}]]
-                 @m)))))))
+                 (:requests @m))))))))
 
 (deftest e2e-test
   (let [m (state/in-memory-state-manager)]
     (t/with-clock (t/mock-clock (t/instant "2020-09-25T08:00:00.000Z"))
       (testing "generate request"
         (request/idp-redirect-response
-         {:request-id    "ABC"
-          :sp-name       "SP test"
-          :acs-url       "http://sp.example.com/demo1/index.php?acs"
-          :idp-url       "http://idp.example.com/SSOService.php"
-          :issuer        "http://sp.example.com/demo1/metadata.php"
+         {:request-id "ABC"
+          :sp-name "SP test"
+          :acs-url "http://sp.example.com/demo1/index.php?acs"
+          :idp-url "http://idp.example.com/SSOService.php"
+          :issuer "http://sp.example.com/demo1/metadata.php"
           :state-manager m}))
       (testing "ID should be recorded"
         (is (= [[(t/instant "2020-09-25T08:00:00Z") #{"ABC"}]]
-               @m)))
+               (:requests @m))))
       (testing "Handle response"
         (letfn [(handle-response! []
                   (-> (str "<samlp:Response"
@@ -107,9 +107,24 @@
           (handle-response!)
           (testing "ID should be removed"
             (is (= [[(t/instant "2020-09-25T08:00:00Z") #{}]]
-                   @m)))
+                   (:requests @m))))
           (testing "Shouldn't be allowed to use ID not recorded in state"
             (is (thrown-with-msg?
                  clojure.lang.ExceptionInfo
                  #"Invalid request ID"
                  (handle-response!)))))))))
+
+(deftest assertion-tracking-test
+  (let [m (state/in-memory-state-manager)]
+    (testing "accept-assertion! tracks assertion IDs"
+      (testing "First assertion is accepted"
+        (is (true? (state/accept-assertion! m "assertion-123"))))
+      (testing "Same assertion is rejected"
+        (is (false? (state/accept-assertion! m "assertion-123"))))
+      (testing "Different assertion is accepted"
+        (is (true? (state/accept-assertion! m "assertion-456"))))
+      (testing "Assertions are tracked separately from requests"
+        (state/record-request! m "request-789")
+        (is (contains? (:assertions @m) "assertion-123"))
+        (is (contains? (:assertions @m) "assertion-456"))
+        (is (contains? (-> @m :requests first second) "request-789"))))))

@@ -18,7 +18,12 @@
     "Called whenever a new response from IdP is received. The state manager should verify that `request-id` was
  actually issued by us (e.g., one we've seen earlier when `record-request!`), and (hopefully) that it is not too old;
  if the response is not acceptable, it must throw an Exception. The state manager should remove the request from its
- state a response with the same ID cannot be used again (e.g. to prevent replay attacks)."))
+ state a response with the same ID cannot be used again (e.g. to prevent replay attacks).")
+
+  (accept-assertion! [this assertion-id]
+    "Called whenever a OneTimeUse assertion is processed. The state manager should verify that `assertion-id` has not
+    been seen before and record it to prevent replay. Returns true if the assertion was accepted, false if it was
+    already seen."))
 
 ;; in-memory-state-manager state works like this:
 ;;
@@ -43,7 +48,7 @@
 ;; dropped by then; it make take up to timeout*1.5.
 
 (defn- prune-buckets [state request-timeout-seconds]
-  (let [now                                        (t/instant)
+  (let [now (t/instant)
         [[bucket-1-created :as bucket-1] bucket-2] state]
     (letfn [(new-bucket []
               [now #{}])]
@@ -86,7 +91,7 @@
    (in-memory-state-manager default-request-timeout-seconds))
 
   ([request-timeout-seconds]
-   (in-memory-state-manager request-timeout-seconds []))
+   (in-memory-state-manager request-timeout-seconds {:requests [] :assertions #{}}))
 
   ([request-timeout-seconds initial-state]
    (let [state (atom initial-state)]
@@ -97,9 +102,14 @@
 
        StateManager
        (record-request! [_ request-id]
-         (swap! state in-memory-state-manager-record-request request-timeout-seconds request-id))
+         (swap! state update :requests in-memory-state-manager-record-request request-timeout-seconds request-id))
        (accept-response! [_ request-id]
-         (swap! state in-memory-state-manager-accept-response request-timeout-seconds request-id))
+         (swap! state update :requests in-memory-state-manager-accept-response request-timeout-seconds request-id))
+       (accept-assertion! [_ assertion-id]
+         (let [seen? (contains? (:assertions @state) assertion-id)]
+           (when-not seen?
+             (swap! state update :assertions conj assertion-id))
+           (not seen?)))
 
        ;; this is here mostly for convenience and testability: deref the state manager itself to see what's in the
        ;; state atom
