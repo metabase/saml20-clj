@@ -359,7 +359,7 @@
   </saml:Subject>
   <saml:Conditions NotBefore=\"" not-before "\" NotOnOrAfter=\"" not-on-or-after "\">
     <saml:AudienceRestriction>
-      <saml:Audience>http://sp.example.com</saml:Audience>
+      <saml:Audience>sp.example.com</saml:Audience>
     </saml:AudienceRestriction>
   </saml:Conditions>
   <saml:AuthnStatement AuthnInstant=\"" authn-instant "\"
@@ -465,43 +465,31 @@
   (testing "SP-initiated profile includes in-response-to validator"
     (let [response-str (create-test-response {:issuer "idp.example.com"})
           response (test/ring-response-post response-str)
-          ;; For testing purposes, we'll override validators to not require authentication
-          ;; and remove audience-restriction which has a bug (uses IdP issuer instead of SP entity ID)
-          test-sp-initiated-validations {:response-validators [:issuer :in-response-to :status-code]
-                                         :assertion-validators [:signature :recipient :not-on-or-after :not-before
-                                                                :subject-confirmation-method :authn-statement
-                                                                :conditions :in-response-to]}
           options {:idp-cert test/idp-cert
                    :sp-private-key test/sp-private-key
                    :acs-url "http://sp.example.com/demo1/index.php?acs"
                    :issuer "idp.example.com"
+                   :sp-entity-id "sp.example.com"
                    :request-id "ONELOGIN_4fee3b046395c4e751011e97f8900b5273d56685"
                    :allowable-clock-skew-seconds 180}
-          enhanced-options (merge options test-sp-initiated-validations)
-          validated (response/validate-response-for-profile response :sp-initiated enhanced-options)]
+          validated (response/validate-response-for-profile response :sp-initiated options)]
       (is (some? validated))
-      ;; Verify that in-response-to is in the validators
-      (is (some #{:in-response-to} (:assertion-validators enhanced-options)))))
+      ;; Verify that in-response-to is in the SP-initiated validators
+      (is (some #{:in-response-to} (:assertion-validators (response/create-validation-config :sp-initiated))))))
 
   (testing "IdP-initiated profile excludes in-response-to validator"
     (let [response-str (create-test-response {:issuer "idp.example.com"})
           response (test/ring-response-post response-str)
-          ;; For testing purposes, we'll override validators to not require authentication
-          ;; and remove audience-restriction which has a bug
-          test-idp-initiated-validations {:response-validators [:issuer :status-code]
-                                          :assertion-validators [:signature :recipient :not-on-or-after :not-before
-                                                                 :subject-confirmation-method :authn-statement
-                                                                 :conditions]}
           options {:idp-cert test/idp-cert
                    :sp-private-key test/sp-private-key
                    :acs-url "http://sp.example.com/demo1/index.php?acs"
                    :issuer "idp.example.com"
+                   :sp-entity-id "sp.example.com"
                    :allowable-clock-skew-seconds 180}
-          enhanced-options (merge options test-idp-initiated-validations)
-          validated (response/validate-response-for-profile response :idp-initiated enhanced-options)]
+          validated (response/validate-response-for-profile response :idp-initiated options)]
       (is (some? validated))
-      ;; Verify that in-response-to is NOT in the validators
-      (is (not (some #{:in-response-to} (:assertion-validators enhanced-options)))))))
+      ;; Verify that in-response-to is NOT in the IdP-initiated validators
+      (is (not (some #{:in-response-to} (:assertion-validators (response/create-validation-config :idp-initiated))))))))
 
 (deftest test-replay-prevention-validator
   "Test the replay prevention validator"
@@ -772,3 +760,56 @@
       ;; Should fail because OneTimeUse condition is present but no state manager
       (is (thrown-with-msg? Exception #"OneTimeUse.*no state manager"
                             (response/validate-assertion :one-time-use assertion validation-options))))))
+
+(deftest test-audience-restriction-validator
+  (testing "validates SP entity ID in audience restriction"
+    (let [assertion (coerce/->SAMLObject (create-test-assertion))
+          sp-entity-id "sp.example.com"
+          options {:sp-entity-id sp-entity-id}]
+      ;; Should pass with correct SP entity ID
+      (is (nil? (response/validate-assertion :audience-restriction assertion options)))
+
+      ;; Should fail with wrong SP entity ID
+      (is (thrown? clojure.lang.ExceptionInfo
+                   (response/validate-assertion :audience-restriction assertion
+                                                {:sp-entity-id "wrong.example.com"})))
+
+      ;; Should pass when sp-entity-id is nil (validation is skipped)
+      (is (nil? (response/validate-assertion :audience-restriction assertion {})))))
+
+  (testing "handles missing conditions gracefully"
+    (let [assertion-xml (str "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                             "<saml2:Assertion xmlns:saml2=\"urn:oasis:names:tc:SAML:2.0:assertion\" "
+                             "ID=\"test-assertion-id\" IssueInstant=\"2014-07-17T01:01:48Z\" Version=\"2.0\">"
+                             "<saml2:Issuer>idp.example.com</saml2:Issuer>"
+                             "<saml2:Subject>"
+                             "<saml2:NameID Format=\"urn:oasis:names:tc:SAML:2.0:nameid-format:transient\">test-user</saml2:NameID>"
+                             "<saml2:SubjectConfirmation Method=\"urn:oasis:names:tc:SAML:2.0:cm:bearer\">"
+                             "<saml2:SubjectConfirmationData NotOnOrAfter=\"2024-01-18T06:21:48Z\" Recipient=\"http://sp.example.com/demo1/index.php?acs\"/>"
+                             "</saml2:SubjectConfirmation>"
+                             "</saml2:Subject>"
+                             "<saml2:AuthnStatement AuthnInstant=\"2014-07-17T01:01:48Z\">"
+                             "<saml2:AuthnContext>"
+                             "<saml2:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:Password</saml2:AuthnContextClassRef>"
+                             "</saml2:AuthnContext>"
+                             "</saml2:AuthnStatement>"
+                             "</saml2:Assertion>")
+          assertion (coerce/->SAMLObject assertion-xml)
+          sp-entity-id "sp.example.com"
+          options {:sp-entity-id sp-entity-id}]
+      ;; Should pass when no conditions are present
+      (is (nil? (response/validate-assertion :audience-restriction assertion options)))))
+
+  (testing "error contains expected audience information"
+    (let [assertion (coerce/->SAMLObject (create-test-assertion))
+          wrong-entity-id "wrong.example.com"
+          options {:sp-entity-id wrong-entity-id}]
+      (try
+        (response/validate-assertion :audience-restriction assertion options)
+        (is false "Should have thrown exception")
+        (catch clojure.lang.ExceptionInfo e
+          (let [data (ex-data e)]
+            (is (= :audience-restriction (get-in data [:error-type])))
+            (is (= wrong-entity-id (:expected-audience data)))
+            (is (vector? (:actual-audiences data)))
+            (is (= [["sp.example.com"]] (:actual-audiences data)))))))))

@@ -175,23 +175,23 @@
         (throw (ex-info "Incorrect Assertion <Issuer>" {}))))))
 
 (defmethod validate-assertion :audience-restriction
-  [_ ^Assertion assertion {:keys [issuer]}]
-  (when issuer
+  [_ ^Assertion assertion {:keys [sp-entity-id]}]
+  (when sp-entity-id
     (let [conditions (.getConditions assertion)]
       (when conditions
         (let [audience-restrictions (.getAudienceRestrictions conditions)
               valid-audience? (some (fn [^AudienceRestriction restriction]
                                       (some (fn [^Audience audience]
-                                              (= issuer (.getURI ^Audience audience)))
+                                              (= sp-entity-id (.getURI ^Audience audience)))
                                             (.getAudiences restriction)))
                                     audience-restrictions)]
           (when-not valid-audience?
-            (throw (ex-info "Assertion audience restriction validation failed"
-                            {:expected-audience issuer
-                             :actual-audiences (mapv (fn [^AudienceRestriction restriction]
-                                                       (mapv #(.getURI ^Audience %)
-                                                             (.getAudiences restriction)))
-                                                     audience-restrictions)}))))))))
+            (throw (errors/validation-error :audience-restriction assertion
+                                            {:expected-audience sp-entity-id
+                                             :actual-audiences (mapv (fn [^AudienceRestriction restriction]
+                                                                       (mapv #(.getURI ^Audience %)
+                                                                             (.getAudiences restriction)))
+                                                                     audience-restrictions)}))))))))
 
 (defmethod validate-assertion :authn-statement
   [_ ^Assertion assertion {:keys [max-session-age-seconds]
