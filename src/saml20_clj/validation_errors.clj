@@ -95,6 +95,10 @@
    :invalid-authn-context
    {:code :invalid-authn-context
     :message "SAML authentication context does not meet requirements"
+    :severity :high}
+   :replay-prevention
+   {:code :replay-prevention
+    :message "SAML assertion has been processed before (replay attack detected)"
     :severity :high}})
 
 (defn validation-error

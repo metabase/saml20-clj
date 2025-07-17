@@ -10,7 +10,7 @@
             [saml20-clj.xml :as xml])
   (:import [org.opensaml.saml.saml2.core Assertion Attribute AttributeStatement Audience AudienceRestriction Response
             Subject SubjectConfirmation SubjectConfirmationData AuthnStatement AuthnContext
-            ProxyRestriction Conditions OneTimeUse AuthnContextClassRef AuthnContextDeclRef]
+            ProxyRestriction Conditions AuthnContextClassRef]
            org.opensaml.messaging.context.MessageContext
            org.opensaml.saml.saml2.core.impl.AuthnRequestBuilder))
 
@@ -301,6 +301,23 @@
                                         {:required-contexts required-authn-contexts
                                          :actual-contexts context-values}))))))
 
+(defmethod validate-assertion :replay-prevention
+  [_ ^Assertion assertion {:keys [state-manager]}]
+  (when state-manager
+    (let [assertion-id (.getID assertion)]
+      (when (state/is-duplicate? state-manager assertion-id)
+        (throw (errors/validation-error
+                :replay-prevention
+                assertion
+                {:severity :high
+                 :assertion-id assertion-id
+                 :error-message "Assertion has been processed before (replay attack detected)"}
+                nil)))
+      ;; Record the assertion to prevent future replay
+      (state/accept-assertion! state-manager assertion-id)
+      ;; Return nil to indicate successful validation
+      nil)))
+
 (def ^:private default-validation-options
   {:response-validators [:signature
                          :issuer
@@ -400,6 +417,200 @@
          (when-let [state-manager (:state-manager options)]
            (state/accept-response! state-manager (.getInResponseTo decrypted-response)))
          decrypted-response)))))
+
+(defn create-validation-config
+  "Create a validation configuration for a specific flow type with optional custom validations.
+  
+  Arguments:
+  - flow-type: :sp-initiated, :idp-initiated, or :default
+  - custom-validations: optional map to override or extend default validations
+  
+  Returns: a validation configuration map suitable for use with validate-response"
+  [flow-type & [custom-validations]]
+  (let [base-config (case flow-type
+                      :sp-initiated sp-initiated-validations
+                      :idp-initiated idp-initiated-validations
+                      :default web-browser-sso-validations
+                      web-browser-sso-validations)]
+    (if custom-validations
+      (merge base-config custom-validations)
+      base-config)))
+
+(defn validate-configuration
+  "Validates that a configuration map has the required structure and supported validators.
+
+  Arguments:
+  - config: validation configuration map
+
+  Returns: validated configuration map or throws exception"
+  [config]
+  (let [valid-response-validators #{:signature :issuer :in-response-to :status-code :require-authenticated}
+        valid-assertion-validators #{:signature :recipient :not-on-or-after :not-before
+                                     :in-response-to :address :issuer :audience-restriction
+                                     :authn-statement :subject-confirmation-method :conditions
+                                     :one-time-use :proxy-restriction :attribute-statement
+                                     :authz-decision-statement :authn-context :replay-prevention}
+        response-validators (set (:response-validators config))
+        assertion-validators (set (:assertion-validators config))
+
+        invalid-response (clojure.set/difference response-validators valid-response-validators)
+        invalid-assertion (clojure.set/difference assertion-validators valid-assertion-validators)]
+
+    (when (seq invalid-response)
+      (throw (ex-info "Invalid response validators"
+                      {:invalid-validators invalid-response
+                       :valid-validators valid-response-validators})))
+
+    (when (seq invalid-assertion)
+      (throw (ex-info "Invalid assertion validators"
+                      {:invalid-validators invalid-assertion
+                       :valid-validators valid-assertion-validators})))
+
+    config))
+
+(defn create-strict-validation-config
+  "Creates a strict validation configuration with maximum security.
+  
+  Arguments:
+  - flow-type: :sp-initiated, :idp-initiated, or :default
+  - custom-validations: optional map of custom validation overrides
+  
+  Returns: validated configuration map with strict validation settings"
+  [flow-type & [custom-validations]]
+  (let [base-config (create-validation-config flow-type)
+        strict-config (-> base-config
+                          (update :assertion-validators conj :replay-prevention)
+                          (update :assertion-validators conj :one-time-use)
+                          (update :assertion-validators conj :proxy-restriction)
+                          (assoc :allowable-clock-skew-seconds 60) ; Stricter timing
+                          (assoc :max-session-age-seconds 3600) ; 1 hour max session
+                          (assoc :require-attributes true) ; Require attributes
+                          (assoc :validate-authorization true)) ; Validate authz decisions
+        merged-config (merge strict-config custom-validations)]
+    (validate-configuration merged-config)))
+
+(defn create-relaxed-validation-config
+  "Creates a relaxed validation configuration for testing or development.
+  
+  Arguments:
+  - flow-type: :sp-initiated, :idp-initiated, or :default
+  - custom-validations: optional map of custom validation overrides
+  
+  Returns: validated configuration map with relaxed validation settings"
+  [flow-type & [custom-validations]]
+  (let [base-config (create-validation-config flow-type)
+        relaxed-config (-> base-config
+                           (update :assertion-validators (fn [validators]
+                                                           (remove #{:replay-prevention :one-time-use} validators)))
+                           (assoc :allowable-clock-skew-seconds 300) ; 5 minutes
+                           (assoc :max-session-age-seconds 86400) ; 24 hours
+                           (assoc :require-attributes false) ; Don't require attributes
+                           (assoc :validate-authorization false)) ; Don't validate authz
+        merged-config (merge relaxed-config custom-validations)]
+    (validate-configuration merged-config)))
+
+(defprotocol CustomValidator
+  "Protocol for custom validation extensions"
+  (validate-custom [this element options context]
+    "Validates a SAML element with custom logic.
+    
+    Arguments:
+    - this: the custom validator instance
+    - element: the SAML element to validate (Response or Assertion)
+    - options: validation options map
+    - context: validation context map
+    
+    Returns: nil on success, throws exception on failure"))
+
+(def ^:private custom-validators
+  "Registry for custom validation plugins"
+  (atom {}))
+
+(defn register-validation-plugin
+  "Register a custom validation plugin.
+  
+  Arguments:
+  - plugin-name: keyword name for the plugin
+  - plugin-fn: function that implements CustomValidator protocol
+  
+  Returns: nil"
+  [plugin-name plugin-fn]
+  (when-not (keyword? plugin-name)
+    (throw (ex-info "Plugin name must be a keyword" {:plugin-name plugin-name})))
+  (when-not (satisfies? CustomValidator plugin-fn)
+    (throw (ex-info "Plugin must implement CustomValidator protocol" {:plugin-name plugin-name})))
+  (swap! custom-validators assoc plugin-name plugin-fn)
+  nil)
+
+(defn unregister-validation-plugin
+  "Unregister a custom validation plugin.
+  
+  Arguments:
+  - plugin-name: keyword name of the plugin to remove
+  
+  Returns: nil"
+  [plugin-name]
+  (swap! custom-validators dissoc plugin-name))
+
+(defn validate-plugin-configuration
+  "Validates that all registered plugins implement the CustomValidator protocol.
+  
+  Returns: list of validation errors, empty if all plugins are valid"
+  []
+  (let [plugins @custom-validators]
+    (reduce (fn [errors [plugin-name plugin-fn]]
+              (if (satisfies? CustomValidator plugin-fn)
+                errors
+                (conj errors {:plugin-name plugin-name
+                              :error "Plugin does not implement CustomValidator protocol"})))
+            []
+            plugins)))
+
+(defn get-plugin-info
+  "Gets information about a specific plugin or all plugins.
+  
+  Arguments:
+  - plugin-name: optional keyword name of specific plugin
+  
+  Returns: plugin info map or collection of plugin info maps"
+  ([]
+   (map (fn [[name plugin-fn]]
+          {:name name
+           :implements-protocol? (satisfies? CustomValidator plugin-fn)
+           :type (type plugin-fn)})
+        @custom-validators))
+  ([plugin-name]
+   (when-let [plugin-fn (get @custom-validators plugin-name)]
+     {:name plugin-name
+      :implements-protocol? (satisfies? CustomValidator plugin-fn)
+      :type (type plugin-fn)})))
+
+(defn list-validation-plugins
+  "List all registered validation plugins.
+  
+  Returns: set of plugin names"
+  []
+  (set (keys @custom-validators)))
+
+(defn apply-custom-validations
+  "Apply custom validation plugins to a SAML element.
+  
+  Arguments:
+  - element: the SAML element to validate (Response or Assertion)
+  - options: validation options map
+  - context: validation context map
+  
+  Returns: nil on success, throws exception on failure"
+  [element options context]
+  (doseq [[plugin-name plugin-fn] @custom-validators]
+    (try
+      (validate-custom plugin-fn element options context)
+      (catch Exception e
+        (throw (ex-info (str "Custom validation plugin failed: " plugin-name)
+                        {:plugin-name plugin-name
+                         :original-error (ex-data e)
+                         :original-message (.getMessage e)}
+                        e))))))
 
 (defn validate-response-for-profile
   "Validate response according to a specific SAML profile. Profiles:

@@ -3,6 +3,7 @@
             [java-time.api :as t]
             [saml20-clj.coerce :as coerce]
             [saml20-clj.sp.response :as response]
+            [saml20-clj.state :as state]
             [saml20-clj.test :as test])
   (:import org.opensaml.saml.saml2.core.Response))
 
@@ -501,3 +502,273 @@
       (is (some? validated))
       ;; Verify that in-response-to is NOT in the validators
       (is (not (some #{:in-response-to} (:assertion-validators enhanced-options)))))))
+
+(deftest test-replay-prevention-validator
+  "Test the replay prevention validator"
+  (testing "replay prevention with state manager"
+    (let [state-manager (state/in-memory-state-manager)
+          assertion (coerce/->SAMLObject (create-test-assertion))
+          validation-options {:state-manager state-manager}]
+
+      ;; First validation should pass
+      (is (nil? (response/validate-assertion :replay-prevention assertion validation-options)))
+
+      ;; Second validation should fail with replay error
+      (is (thrown-with-msg? Exception #"SAML assertion has been processed before"
+                            (response/validate-assertion :replay-prevention assertion validation-options)))))
+
+  (testing "replay prevention without state manager"
+    (let [assertion (coerce/->SAMLObject (create-test-assertion))
+          validation-options {}]
+
+      ;; Should pass without state manager (validation is skipped)
+      (is (nil? (response/validate-assertion :replay-prevention assertion validation-options))))))
+
+(deftest test-configuration-system
+  "Test the configuration-driven validation system"
+  (testing "create-validation-config"
+    (let [sp-config (response/create-validation-config :sp-initiated)
+          idp-config (response/create-validation-config :idp-initiated)
+          default-config (response/create-validation-config :default)
+          custom-config (response/create-validation-config :sp-initiated
+                                                           {:assertion-validators [:signature :replay-prevention]})]
+
+      ;; Test that configs are created correctly
+      (is (contains? (set (:assertion-validators sp-config)) :in-response-to))
+      (is (not (contains? (set (:assertion-validators idp-config)) :in-response-to)))
+      (is (= (:assertion-validators default-config) (:assertion-validators idp-config)))
+      (is (= (:assertion-validators custom-config) [:signature :replay-prevention]))))
+
+  (testing "validate-configuration"
+    (let [valid-config {:response-validators [:signature :issuer]
+                        :assertion-validators [:signature :recipient]}
+          invalid-response-config {:response-validators [:invalid-validator]
+                                   :assertion-validators [:signature]}
+          invalid-assertion-config {:response-validators [:signature]
+                                    :assertion-validators [:invalid-validator]}]
+
+      ;; Valid config should pass
+      (is (= valid-config (response/validate-configuration valid-config)))
+
+      ;; Invalid response validator should fail
+      (is (thrown-with-msg? Exception #"Invalid response validators"
+                            (response/validate-configuration invalid-response-config)))
+
+      ;; Invalid assertion validator should fail
+      (is (thrown-with-msg? Exception #"Invalid assertion validators"
+                            (response/validate-configuration invalid-assertion-config))))))
+
+(deftest test-plugin-system
+  "Test the custom validation plugin system"
+  (testing "plugin registration and unregistration"
+    (let [test-plugin (reify response/CustomValidator
+                        (validate-custom [this element options context]
+                          (when (:fail-validation options)
+                            (throw (ex-info "Test plugin validation failed" {:plugin-test true})))))]
+
+      ;; Initially no plugins
+      (is (empty? (response/list-validation-plugins)))
+
+      ;; Register plugin
+      (response/register-validation-plugin :test-plugin test-plugin)
+      (is (contains? (response/list-validation-plugins) :test-plugin))
+
+      ;; Unregister plugin
+      (response/unregister-validation-plugin :test-plugin)
+      (is (not (contains? (response/list-validation-plugins) :test-plugin)))))
+
+  (testing "plugin validation execution"
+    (let [assertion (coerce/->SAMLObject (create-test-assertion))
+          test-plugin (reify response/CustomValidator
+                        (validate-custom [this element options context]
+                          (when (:fail-validation options)
+                            (throw (ex-info "Test plugin validation failed" {:plugin-test true})))))]
+
+      ;; Register plugin
+      (response/register-validation-plugin :test-plugin test-plugin)
+
+      ;; Should pass with normal options
+      (is (nil? (response/apply-custom-validations assertion {} {})))
+
+      ;; Should fail with fail-validation option
+      (is (thrown-with-msg? Exception #"Custom validation plugin failed: :test-plugin"
+                            (response/apply-custom-validations assertion {:fail-validation true} {})))
+
+      ;; Clean up
+      (response/unregister-validation-plugin :test-plugin))))
+
+(deftest test-enhanced-state-manager
+  "Test enhanced state manager functionality for Phase 3"
+  (testing "cleanup-expired! and is-duplicate? methods"
+    (let [state-manager (state/in-memory-state-manager)]
+
+      ;; Test is-duplicate? with new assertion
+      (is (= false (state/is-duplicate? state-manager "test-assertion-1")))
+
+      ;; Test accept-assertion! 
+      (is (= true (state/accept-assertion! state-manager "test-assertion-1")))
+
+      ;; Test is-duplicate? after recording
+      (is (= true (state/is-duplicate? state-manager "test-assertion-1")))
+
+      ;; Test accept-assertion! for duplicate
+      (is (= false (state/accept-assertion! state-manager "test-assertion-1")))
+
+      ;; Test cleanup-expired!
+      (is (nil? (state/cleanup-expired! state-manager)))
+
+      ;; State should still contain our assertion after cleanup
+      (is (= true (state/is-duplicate? state-manager "test-assertion-1"))))))
+
+(deftest test-enhanced-replay-prevention
+  "Test enhanced replay prevention validator"
+  (testing "replay prevention with is-duplicate? check"
+    (let [state-manager (state/in-memory-state-manager)
+          assertion (coerce/->SAMLObject (create-test-assertion))
+          validation-options {:state-manager state-manager}]
+
+      ;; First validation should pass and record assertion
+      (is (nil? (response/validate-assertion :replay-prevention assertion validation-options)))
+
+      ;; Assertion should now be marked as seen
+      (is (= true (state/is-duplicate? state-manager (.getID ^org.opensaml.saml.saml2.core.Assertion assertion))))
+
+      ;; Second validation should fail with replay error
+      (is (thrown-with-msg? Exception #"SAML assertion has been processed before"
+                            (response/validate-assertion :replay-prevention assertion validation-options))))))
+
+(deftest test-configuration-driven-validation
+  "Test configuration-driven validation enhancements"
+  (testing "strict validation config"
+    (let [config (response/create-strict-validation-config :sp-initiated)]
+      (is (contains? (set (:assertion-validators config)) :replay-prevention))
+      (is (contains? (set (:assertion-validators config)) :one-time-use))
+      (is (contains? (set (:assertion-validators config)) :proxy-restriction))
+      (is (= 60 (:allowable-clock-skew-seconds config)))
+      (is (= 3600 (:max-session-age-seconds config)))
+      (is (= true (:require-attributes config)))
+      (is (= true (:validate-authorization config)))))
+
+  (testing "relaxed validation config"
+    (let [config (response/create-relaxed-validation-config :sp-initiated)]
+      (is (not (contains? (set (:assertion-validators config)) :replay-prevention)))
+      (is (not (contains? (set (:assertion-validators config)) :one-time-use)))
+      (is (= 300 (:allowable-clock-skew-seconds config)))
+      (is (= 86400 (:max-session-age-seconds config)))
+      (is (= false (:require-attributes config)))
+      (is (= false (:validate-authorization config)))))
+
+  (testing "custom validation config"
+    (let [config (response/create-validation-config :sp-initiated {:custom-setting true})]
+      (is (= true (:custom-setting config))))))
+
+(deftest test-enhanced-plugin-system
+  "Test enhanced plugin system with validation"
+  (testing "plugin validation on registration"
+    (let [valid-plugin (reify response/CustomValidator
+                         (validate-custom [this element options context] nil))
+          invalid-plugin (fn [element options context] nil)]
+
+      ;; Valid plugin should register successfully
+      (is (nil? (response/register-validation-plugin :valid-plugin valid-plugin)))
+
+      ;; Invalid plugin should throw exception
+      (is (thrown-with-msg? Exception #"Plugin must implement CustomValidator protocol"
+                            (response/register-validation-plugin :invalid-plugin invalid-plugin)))
+
+      ;; Non-keyword name should throw exception
+      (is (thrown-with-msg? Exception #"Plugin name must be a keyword"
+                            (response/register-validation-plugin "invalid-name" valid-plugin)))
+
+      ;; Clean up
+      (response/unregister-validation-plugin :valid-plugin)))
+
+  (testing "plugin info and validation"
+    (let [test-plugin (reify response/CustomValidator
+                        (validate-custom [this element options context] nil))]
+
+      ;; Register plugin
+      (response/register-validation-plugin :test-plugin test-plugin)
+
+      ;; Test plugin info
+      (let [info (response/get-plugin-info :test-plugin)]
+        (is (= :test-plugin (:name info)))
+        (is (= true (:implements-protocol? info))))
+
+      ;; Test validation
+      (is (empty? (response/validate-plugin-configuration)))
+
+      ;; Clean up
+      (response/unregister-validation-plugin :test-plugin))))
+
+(deftest test-one-time-use-validator
+  "Test the one-time-use validator"
+  (testing "one-time-use validator with OneTimeUse condition"
+    (let [state-manager (state/in-memory-state-manager)
+          ;; Create a custom assertion XML with OneTimeUse condition
+          assertion-xml (str "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                             "<saml2:Assertion xmlns:saml2=\"urn:oasis:names:tc:SAML:2.0:assertion\" "
+                             "ID=\"test-assertion-id\" IssueInstant=\"2014-07-17T01:01:48Z\" Version=\"2.0\">"
+                             "<saml2:Issuer>idp.example.com</saml2:Issuer>"
+                             "<saml2:Subject>"
+                             "<saml2:NameID Format=\"urn:oasis:names:tc:SAML:2.0:nameid-format:transient\">test-user</saml2:NameID>"
+                             "<saml2:SubjectConfirmation Method=\"urn:oasis:names:tc:SAML:2.0:cm:bearer\">"
+                             "<saml2:SubjectConfirmationData NotOnOrAfter=\"2024-01-18T06:21:48Z\" Recipient=\"http://sp.example.com/demo1/index.php?acs\"/>"
+                             "</saml2:SubjectConfirmation>"
+                             "</saml2:Subject>"
+                             "<saml2:Conditions NotBefore=\"2014-07-17T01:01:18Z\" NotOnOrAfter=\"2024-01-18T06:21:48Z\">"
+                             "<saml2:OneTimeUse/>"
+                             "</saml2:Conditions>"
+                             "<saml2:AuthnStatement AuthnInstant=\"2014-07-17T01:01:48Z\">"
+                             "<saml2:AuthnContext>"
+                             "<saml2:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:Password</saml2:AuthnContextClassRef>"
+                             "</saml2:AuthnContext>"
+                             "</saml2:AuthnStatement>"
+                             "</saml2:Assertion>")
+          assertion (coerce/->SAMLObject assertion-xml)
+          validation-options {:state-manager state-manager}]
+
+      ;; First validation should pass
+      (is (nil? (response/validate-assertion :one-time-use assertion validation-options)))
+
+      ;; Second validation should fail because OneTimeUse assertion was already used
+      (is (thrown-with-msg? Exception #"Assertion has already been used \(OneTimeUse violation\)"
+                            (response/validate-assertion :one-time-use assertion validation-options)))))
+
+  (testing "one-time-use validator without OneTimeUse condition"
+    (let [state-manager (state/in-memory-state-manager)
+          assertion (coerce/->SAMLObject (create-test-assertion))
+          validation-options {:state-manager state-manager}]
+
+      ;; Should pass without OneTimeUse condition
+      (is (nil? (response/validate-assertion :one-time-use assertion validation-options)))
+      ;; Should pass again because there's no OneTimeUse condition
+      (is (nil? (response/validate-assertion :one-time-use assertion validation-options)))))
+
+  (testing "one-time-use validator without state manager"
+    (let [;; Create assertion with OneTimeUse condition
+          assertion-xml (str "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                             "<saml2:Assertion xmlns:saml2=\"urn:oasis:names:tc:SAML:2.0:assertion\" "
+                             "ID=\"test-assertion-id\" IssueInstant=\"2014-07-17T01:01:48Z\" Version=\"2.0\">"
+                             "<saml2:Issuer>idp.example.com</saml2:Issuer>"
+                             "<saml2:Subject>"
+                             "<saml2:NameID Format=\"urn:oasis:names:tc:SAML:2.0:nameid-format:transient\">test-user</saml2:NameID>"
+                             "<saml2:SubjectConfirmation Method=\"urn:oasis:names:tc:SAML:2.0:cm:bearer\">"
+                             "<saml2:SubjectConfirmationData NotOnOrAfter=\"2024-01-18T06:21:48Z\" Recipient=\"http://sp.example.com/demo1/index.php?acs\"/>"
+                             "</saml2:SubjectConfirmation>"
+                             "</saml2:Subject>"
+                             "<saml2:Conditions NotBefore=\"2014-07-17T01:01:18Z\" NotOnOrAfter=\"2024-01-18T06:21:48Z\">"
+                             "<saml2:OneTimeUse/>"
+                             "</saml2:Conditions>"
+                             "<saml2:AuthnStatement AuthnInstant=\"2014-07-17T01:01:48Z\">"
+                             "<saml2:AuthnContext>"
+                             "<saml2:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:Password</saml2:AuthnContextClassRef>"
+                             "</saml2:AuthnContext>"
+                             "</saml2:AuthnStatement>"
+                             "</saml2:Assertion>")
+          assertion (coerce/->SAMLObject assertion-xml)
+          validation-options {}]
+
+      ;; Should fail because OneTimeUse condition is present but no state manager
+      (is (thrown-with-msg? Exception #"OneTimeUse.*no state manager"
+                            (response/validate-assertion :one-time-use assertion validation-options))))))

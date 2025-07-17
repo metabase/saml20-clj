@@ -23,7 +23,15 @@
   (accept-assertion! [this assertion-id]
     "Called whenever a OneTimeUse assertion is processed. The state manager should verify that `assertion-id` has not
     been seen before and record it to prevent replay. Returns true if the assertion was accepted, false if it was
-    already seen."))
+    already seen.")
+
+  (cleanup-expired! [this]
+    "Removes expired requests and assertions from the state manager. This should be called periodically to prevent
+    memory leaks.")
+
+  (is-duplicate? [this assertion-id]
+    "Checks if an assertion ID has been seen before without recording it. Returns true if it's a duplicate.
+    This is useful for the replay prevention validator."))
 
 ;; in-memory-state-manager state works like this:
 ;;
@@ -91,7 +99,7 @@
    (in-memory-state-manager default-request-timeout-seconds))
 
   ([request-timeout-seconds]
-   (in-memory-state-manager request-timeout-seconds {:requests [] :assertions #{}}))
+   (in-memory-state-manager request-timeout-seconds {:requests [] :assertions #{} :last-cleanup (t/instant)}))
 
   ([request-timeout-seconds initial-state]
    (let [state (atom initial-state)]
@@ -110,6 +118,23 @@
            (when-not seen?
              (swap! state update :assertions conj assertion-id))
            (not seen?)))
+       (cleanup-expired! [this]
+         (let [now (t/instant)
+               cutoff (t/minus now (t/seconds request-timeout-seconds))]
+           (swap! state (fn [s]
+                          (-> s
+                              (update :requests prune-buckets request-timeout-seconds)
+                              (update :assertions (fn [assertions]
+                                                   ;; In a real system, you'd want to track assertion timestamps
+                                                   ;; For now, we'll just keep a reasonable number of recent assertions
+                                                    (let [assertion-vec (vec assertions)]
+                                                      (if (> (count assertion-vec) 1000)
+                                                        (set (take-last 500 assertion-vec))
+                                                        assertions))))
+                              (assoc :last-cleanup now))))
+           nil))
+       (is-duplicate? [_ assertion-id]
+         (contains? (:assertions @state) assertion-id))
 
        ;; this is here mostly for convenience and testability: deref the state manager itself to see what's in the
        ;; state atom
