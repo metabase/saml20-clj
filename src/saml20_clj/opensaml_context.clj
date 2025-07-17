@@ -78,3 +78,20 @@
   (when-let [^SecurityParametersContext sec-params (get-security-parameters msg-ctx)]
     (when-let [^SignatureValidationParameters sig-params (.getSignatureValidationParameters sec-params)]
       (.getSignatureTrustEngine sig-params))))
+
+(defn get-signature-validation-params
+  "Get signature validation parameters from message context"
+  [^MessageContext msg-ctx]
+  (when-let [^SecurityParametersContext sec-params (get-security-parameters msg-ctx)]
+    (.getSignatureValidationParameters sec-params)))
+
+(defn validate-signature-with-opensaml
+  "Validate signature using OpenSAML's trust engine"
+  [^org.opensaml.xmlsec.signature.Signature signature ^MessageContext msg-ctx]
+  (if-let [^ExplicitKeySignatureTrustEngine trust-engine (get-signature-trust-engine msg-ctx)]
+    (let [criteria-set (net.shibboleth.shared.resolver.CriteriaSet.)]
+      (.add criteria-set (org.opensaml.xmlsec.signature.support.SignatureValidationParametersCriterion.
+                          (get-signature-validation-params msg-ctx)))
+      (when-not (.validate trust-engine signature criteria-set)
+        (throw (ex-info "Signature validation failed" {:signature signature}))))
+    (throw (ex-info "No trust engine configured for signature validation" {}))))

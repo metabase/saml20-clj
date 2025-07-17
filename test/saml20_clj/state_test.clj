@@ -103,7 +103,7 @@
                            "</samlp:Response>")
                       coerce/->Response
                       test/ring-response-post
-                      (response/validate-response {:state-manager m, :response-validators []})))]
+                      (response/validate-response-for-profile :default {:state-manager m, :response-validators []})))]
           (handle-response!)
           (testing "ID should be removed"
             (is (= [[(t/instant "2020-09-25T08:00:00Z") #{}]]

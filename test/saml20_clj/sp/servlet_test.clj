@@ -2,23 +2,24 @@
   (:require [clojure.test :refer [deftest is testing]]
             [saml20-clj.sp.servlet :as servlet])
   (:import
-   [jakarta.servlet.http Cookie]
-   [java.util Locale]))
+   [jakarta.servlet.http Cookie HttpServletResponse]
+   [java.util Locale]
+   [net.shibboleth.shared.primitive NonnullSupplier]))
 
 (set! *warn-on-reflection* true)
 
 (deftest map-making-servlet-basic-test
   (testing "Basic servlet creation and response extraction"
-    (let [[supplier response-fn] (servlet/map-making-servlet)
-          servlet-resp (.get supplier)]
+    (let [[^NonnullSupplier supplier response-fn] (servlet/map-making-servlet)
+          ^HttpServletResponse servlet-resp (.get supplier)]
       (is (instance? jakarta.servlet.http.HttpServletResponse servlet-resp))
       (is (fn? response-fn))
       (is (= {:status 302 :body "" :headers {}} (response-fn))))))
 
 (deftest header-management-test
   (testing "Header setting and retrieval"
-    (let [[supplier response-fn] (servlet/map-making-servlet)
-          servlet-resp (.get supplier)]
+    (let [[^NonnullSupplier supplier response-fn] (servlet/map-making-servlet)
+          ^HttpServletResponse servlet-resp (.get supplier)]
 
       (testing "setHeader and getHeader"
         (.setHeader servlet-resp "Content-Type" "application/xml")
@@ -44,8 +45,8 @@
 
 (deftest typed-header-methods-test
   (testing "Integer and date header methods"
-    (let [[supplier _response-fn] (servlet/map-making-servlet)
-          servlet-resp (.get supplier)]
+    (let [[^NonnullSupplier supplier _response-fn] (servlet/map-making-servlet)
+          ^HttpServletResponse servlet-resp (.get supplier)]
 
       (testing "setIntHeader"
         (.setIntHeader servlet-resp "Content-Length" 1024)
@@ -66,8 +67,8 @@
 
 (deftest status-management-test
   (testing "Status setting and retrieval"
-    (let [[supplier response-fn] (servlet/map-making-servlet)
-          servlet-resp (.get supplier)]
+    (let [[^NonnullSupplier supplier response-fn] (servlet/map-making-servlet)
+          ^HttpServletResponse servlet-resp (.get supplier)]
 
       (testing "Default status is 302"
         (is (= 302 (.getStatus servlet-resp))))
@@ -79,8 +80,8 @@
 
 (deftest content-type-and-encoding-test
   (testing "Content type and character encoding"
-    (let [[supplier _response-fn] (servlet/map-making-servlet)
-          servlet-resp (.get supplier)]
+    (let [[^NonnullSupplier supplier _response-fn] (servlet/map-making-servlet)
+          ^HttpServletResponse servlet-resp (.get supplier)]
 
       (testing "setContentType and getContentType"
         (.setContentType servlet-resp "text/html; charset=UTF-8")
@@ -96,8 +97,8 @@
 
 (deftest content-length-test
   (testing "Content length methods"
-    (let [[supplier _response-fn] (servlet/map-making-servlet)
-          servlet-resp (.get supplier)]
+    (let [[^NonnullSupplier supplier _response-fn] (servlet/map-making-servlet)
+          ^HttpServletResponse servlet-resp (.get supplier)]
 
       (testing "setContentLength"
         (.setContentLength servlet-resp 2048)
@@ -109,8 +110,8 @@
 
 (deftest locale-test
   (testing "Locale management"
-    (let [[supplier _response-fn] (servlet/map-making-servlet)
-          servlet-resp (.get supplier)]
+    (let [[^NonnullSupplier supplier _response-fn] (servlet/map-making-servlet)
+          ^HttpServletResponse servlet-resp (.get supplier)]
 
       (testing "getLocale returns default locale"
         (is (instance? Locale (.getLocale servlet-resp))))
@@ -122,8 +123,8 @@
 
 (deftest buffer-management-test
   (testing "Buffer management methods"
-    (let [[supplier _response-fn] (servlet/map-making-servlet)
-          servlet-resp (.get supplier)]
+    (let [[^NonnullSupplier supplier _response-fn] (servlet/map-making-servlet)
+          ^HttpServletResponse servlet-resp (.get supplier)]
 
       (testing "getBufferSize returns default 8192"
         (is (= 8192 (.getBufferSize servlet-resp))))
@@ -141,8 +142,8 @@
 
 (deftest output-stream-test
   (testing "Output stream methods"
-    (let [[supplier _response-fn] (servlet/map-making-servlet)
-          servlet-resp (.get supplier)]
+    (let [[^NonnullSupplier supplier _response-fn] (servlet/map-making-servlet)
+          ^HttpServletResponse servlet-resp (.get supplier)]
 
       (testing "getOutputStream returns ServletOutputStream"
         (let [output-stream (.getOutputStream servlet-resp)]
@@ -157,8 +158,8 @@
 
 (deftest cookie-test
   (testing "Cookie management"
-    (let [[supplier _response-fn] (servlet/map-making-servlet)
-          servlet-resp (.get supplier)]
+    (let [[^NonnullSupplier supplier _response-fn] (servlet/map-making-servlet)
+          ^HttpServletResponse servlet-resp (.get supplier)]
 
       (testing "addCookie doesn't throw exception"
         (let [cookie (Cookie. "test" "value")]
@@ -168,8 +169,8 @@
 
 (deftest url-encoding-test
   (testing "URL encoding methods"
-    (let [[supplier _response-fn] (servlet/map-making-servlet)
-          servlet-resp (.get supplier)]
+    (let [[^NonnullSupplier supplier _response-fn] (servlet/map-making-servlet)
+          ^HttpServletResponse servlet-resp (.get supplier)]
 
       (testing "encodeURL returns URL unchanged"
         (is (= "http://example.com" (.encodeURL servlet-resp "http://example.com"))))
@@ -179,8 +180,8 @@
 
 (deftest trailer-support-test
   (testing "HTTP/2 trailer support"
-    (let [[supplier _response-fn] (servlet/map-making-servlet)
-          servlet-resp (.get supplier)]
+    (let [[^NonnullSupplier supplier _response-fn] (servlet/map-making-servlet)
+          ^HttpServletResponse servlet-resp (.get supplier)]
 
       (testing "getTrailerFields returns supplier with empty map"
         (let [supplier (.getTrailerFields servlet-resp)]
@@ -195,8 +196,8 @@
 
 (deftest redirect-functionality-test
   (testing "Redirect functionality - the primary use case"
-    (let [[supplier response-fn] (servlet/map-making-servlet)
-          servlet-resp (.get supplier)]
+    (let [[^NonnullSupplier supplier response-fn] (servlet/map-making-servlet)
+          ^HttpServletResponse servlet-resp (.get supplier)]
 
       (testing "sendRedirect sets location header"
         (.sendRedirect servlet-resp "https://idp.example.com/sso")
@@ -210,8 +211,8 @@
 
 (deftest integration-test
   (testing "Complete workflow simulation"
-    (let [[supplier response-fn] (servlet/map-making-servlet)
-          servlet-resp (.get supplier)]
+    (let [[^NonnullSupplier supplier response-fn] (servlet/map-making-servlet)
+          ^HttpServletResponse servlet-resp (.get supplier)]
 
       ;; Simulate typical SAML redirect workflow
       (.setStatus servlet-resp 302)

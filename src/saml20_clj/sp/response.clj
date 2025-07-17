@@ -10,7 +10,7 @@
             [saml20-clj.xml :as xml])
   (:import [org.opensaml.saml.saml2.core Assertion Attribute AttributeStatement Audience AudienceRestriction Response
             Subject SubjectConfirmation SubjectConfirmationData AuthnStatement AuthnContext
-            Conditions OneTimeUse ProxyRestriction StatusCode]
+            ProxyRestriction Conditions OneTimeUse AuthnContextClassRef AuthnContextDeclRef]
            org.opensaml.messaging.context.MessageContext
            org.opensaml.saml.saml2.core.impl.AuthnRequestBuilder))
 
@@ -165,12 +165,6 @@
                                                      {:data (coerce/->xml-string data)
                                                       :request-id user-agent-address})))))))
 
-;; for Assertions:
-;;
-;; Each assertion's <Issuer> element MUST contain the unique identifier of the issuing identity provider
-;;
-;; If the `:issuer` option is passed, make sure that the <Assertion> has an <Issuer> and that is value matches
-;; `issuer`.
 (defmethod validate-assertion :issuer
   [_ ^Assertion assertion {:keys [issuer]}]
   (when issuer
@@ -188,14 +182,14 @@
         (let [audience-restrictions (.getAudienceRestrictions conditions)
               valid-audience? (some (fn [^AudienceRestriction restriction]
                                       (some (fn [^Audience audience]
-                                              (= issuer (.getValue audience)))
+                                              (= issuer (.getURI ^Audience audience)))
                                             (.getAudiences restriction)))
                                     audience-restrictions)]
           (when-not valid-audience?
             (throw (ex-info "Assertion audience restriction validation failed"
                             {:expected-audience issuer
                              :actual-audiences (mapv (fn [^AudienceRestriction restriction]
-                                                       (mapv #(.getValue ^Audience %)
+                                                       (mapv #(.getURI ^Audience %)
                                                              (.getAudiences restriction)))
                                                      audience-restrictions)}))))))))
 
@@ -249,9 +243,9 @@
 
 (defmethod validate-assertion :one-time-use
   [_ ^Assertion assertion {:keys [state-manager]}]
-  (when-let [conditions (.getConditions assertion)]
-    (let [one-time-use-conditions (.getOneTimeUses ^Conditions conditions)]
-      (when (seq one-time-use-conditions)
+  (when-let [^Conditions conditions (.getConditions assertion)]
+    (let [one-time-use-condition (.getOneTimeUse conditions)]
+      (when one-time-use-condition
         (when-not state-manager
           (throw (ex-info "OneTimeUse condition present but no state manager configured"
                           {:assertion-id (.getID assertion)})))
@@ -262,13 +256,50 @@
 
 (defmethod validate-assertion :proxy-restriction
   [_ ^Assertion assertion _]
-  (when-let [conditions (.getConditions assertion)]
-    (let [proxy-restrictions (.getProxyRestrictions ^Conditions conditions)]
-      (doseq [^ProxyRestriction restriction proxy-restrictions]
-        (let [proxy-count (.getProxyCount restriction)]
+  (when-let [^Conditions conditions (.getConditions assertion)]
+    (let [^ProxyRestriction proxy-restriction (.getProxyRestriction conditions)]
+      (when proxy-restriction
+        (let [proxy-count (.getProxyCount proxy-restriction)]
           (when (and proxy-count (zero? proxy-count))
             (throw (ex-info "ProxyRestriction violation: assertion cannot be proxied"
                             {:proxy-count proxy-count}))))))))
+
+(defmethod validate-assertion :attribute-statement
+  [_ ^Assertion assertion {:keys [require-attributes]}]
+  (when require-attributes
+    (let [attribute-statements (.getAttributeStatements assertion)]
+      (when (empty? attribute-statements)
+        (throw (errors/validation-error :missing-attribute-statement assertion
+                                        {:assertion-id (.getID assertion)}))))))
+
+(defmethod validate-assertion :authz-decision-statement
+  [_ ^Assertion assertion {:keys [validate-authorization]}]
+  (when validate-authorization
+    (let [authz-statements (.getAuthzDecisionStatements assertion)]
+      (doseq [^org.opensaml.saml.saml2.core.AuthzDecisionStatement stmt authz-statements]
+        (let [decision (.getDecision stmt)]
+          (when-not (= decision org.opensaml.saml.saml2.core.DecisionTypeEnumeration/PERMIT)
+            (throw (errors/validation-error :authorization-denied assertion
+                                            {:decision (str decision)
+                                             :resource (.getResource stmt)
+                                             :actions (map #(.getValue ^org.opensaml.saml.saml2.core.Action %)
+                                                           (.getActions stmt))}))))))))
+
+(defmethod validate-assertion :authn-context
+  [_ ^Assertion assertion {:keys [required-authn-contexts]}]
+  (when (seq required-authn-contexts)
+    (let [authn-statements (.getAuthnStatements assertion)
+          actual-contexts (for [^AuthnStatement stmt authn-statements
+                                :let [^AuthnContext ctx (.getAuthnContext stmt)]
+                                :when ctx]
+                            (or (.getAuthnContextClassRef ctx)
+                                (.getAuthnContextDeclRef ctx)))
+          context-values (map (fn [ref] (when ref (.getURI ^AuthnContextClassRef ref)))
+                              (remove nil? actual-contexts))]
+      (when-not (some (set required-authn-contexts) context-values)
+        (throw (errors/validation-error :invalid-authn-context assertion
+                                        {:required-contexts required-authn-contexts
+                                         :actual-contexts context-values}))))))
 
 (def ^:private default-validation-options
   {:response-validators [:signature
@@ -306,7 +337,7 @@
          :assertion-validators (remove #{:in-response-to}
                                        (:assertion-validators web-browser-sso-validations))))
 
-(defn validate-response
+(defn- validate-response
   "Validate response. Returns decrypted response if valid. Options:
 
   * `:response-validators` - optional. The validators to run against the `<Response>` itself. Validators are
@@ -381,7 +412,7 @@
                          :idp-initiated idp-initiated-validations
                          :default web-browser-sso-validations
                          web-browser-sso-validations)
-        enhanced-options (merge options profile-config)]
+        enhanced-options (merge profile-config options)]
     (validate-response response enhanced-options)))
 
 ;;; +----------------------------------------------------------------------------------------------------------------+

@@ -83,6 +83,18 @@
    :authentication-required
    {:code :authentication-required
     :message "SAML message is not authenticated"
+    :severity :high}
+   :missing-attribute-statement
+   {:code :missing-attribute-statement
+    :message "SAML assertion missing required AttributeStatement"
+    :severity :medium}
+   :authorization-denied
+   {:code :authorization-denied
+    :message "SAML authorization decision statement denied access"
+    :severity :high}
+   :invalid-authn-context
+   {:code :invalid-authn-context
+    :message "SAML authentication context does not meet requirements"
     :severity :high}})
 
 (defn validation-error

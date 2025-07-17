@@ -40,7 +40,7 @@
  [response
   decrypt-response
   assertions
-  validate-response]
+  validate-response-for-profile]
 
  [logout-response
   logout-success?
