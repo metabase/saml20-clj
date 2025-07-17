@@ -60,6 +60,10 @@
 (defprotocol CoerceToLogoutResponse
   (->LogoutResponse ^org.opensaml.saml.saml2.core.LogoutResponse [this]))
 
+(defprotocol CoerceToSignature
+  (->Signature ^org.opensaml.xmlsec.signature.Signature [this]
+    "Coerce to OpenSAML Signature object"))
+
 (defprotocol SerializeXMLString
   (->xml-string ^String [this]))
 
@@ -276,7 +280,7 @@
   org.opensaml.core.xml.XMLObject
   (->Element [this]
     (let [marshaller-factory (org.opensaml.core.xml.config.XMLObjectProviderRegistrySupport/getMarshallerFactory)
-          marshaller         (.getMarshaller marshaller-factory this)]
+          marshaller (.getMarshaller marshaller-factory this)]
       (when-not marshaller
         (throw (ex-info (format "Don't know how to marshall %s" (.getCanonicalName (class this)))
                         {:object this})))
@@ -302,7 +306,7 @@
   org.w3c.dom.Element
   (->SAMLObject [this]
     (let [unmarshaller-factory (org.opensaml.core.xml.config.XMLObjectProviderRegistrySupport/getUnmarshallerFactory)
-          unmarshaller         (.getUnmarshaller unmarshaller-factory this)]
+          unmarshaller (.getUnmarshaller unmarshaller-factory this)]
       (when-not unmarshaller
         (throw (ex-info (format "Don't know how to unmarshall %s" (.getCanonicalName (class this)))
                         {:object this})))
@@ -358,6 +362,22 @@
   Object
   (->Response [this]
     (->Response (->SAMLObject this))))
+
+(extend-protocol CoerceToSignature
+  nil
+  (->Signature [_] nil)
+
+  org.opensaml.xmlsec.signature.Signature
+  (->Signature [this] this)
+
+  org.opensaml.saml.common.SignableSAMLObject
+  (->Signature [this]
+    (.getSignature this))
+
+  Object
+  (->Signature [this]
+    (when-let [obj (->SAMLObject this)]
+      (.getSignature obj))))
 
 (extend-protocol SerializeXMLString
   nil

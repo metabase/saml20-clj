@@ -4,6 +4,7 @@
   (:require [java-time.api :as t]
             [saml20-clj.coerce :as coerce]
             [saml20-clj.crypto :as crypto]
+            [saml20-clj.enhanced-crypto :as enhanced-crypto]
             [saml20-clj.sp.message :as message]
             [saml20-clj.state :as state]
             [saml20-clj.validation-errors :as errors]
@@ -317,6 +318,25 @@
       (state/accept-assertion! state-manager assertion-id)
       ;; Return nil to indicate successful validation
       nil)))
+
+(defmethod validate-assertion :enhanced-signature
+  [_ assertion {:keys [idp-cert]}]
+  (when idp-cert
+    (try
+      (enhanced-crypto/validate-signature-with-opensaml assertion idp-cert)
+      (catch Throwable e
+        (throw (errors/validation-error :signature-validation assertion {:idp-cert idp-cert} e))))))
+
+(defmethod validate-assertion :signature-algorithm
+  [_ assertion _]
+  (when-let [signature (.getSignature assertion)]
+    (enhanced-crypto/validate-signature-algorithm signature)))
+
+(defmethod validate-assertion :encryption-algorithm
+  [_ assertion _]
+  ;; This validator would need access to the encrypted assertion element
+  ;; For now, we'll skip this validation on decrypted assertions
+  nil)
 
 (def ^:private default-validation-options
   {:response-validators [:signature

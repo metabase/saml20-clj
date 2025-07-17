@@ -99,7 +99,60 @@
    :replay-prevention
    {:code :replay-prevention
     :message "SAML assertion has been processed before (replay attack detected)"
-    :severity :high}})
+    :severity :high}
+   ;; Enhanced crypto errors
+   :signature-profile-invalid
+   {:code :signature-profile-invalid
+    :message "Signature does not conform to SAML signature profile"
+    :severity :high}
+   :signature-validation-failed
+   {:code :signature-validation-failed
+    :message "Signature validation against credential failed"
+    :severity :high}
+   :certificate-chain-invalid
+   {:code :certificate-chain-invalid
+    :message "Certificate chain validation failed"
+    :severity :high}
+   :decryption-error
+   {:code :decryption-error
+    :message "Unexpected error during decryption"
+    :severity :high}
+   :signature-trust-validation-failed
+   {:code :signature-trust-validation-failed
+    :message "Signature trust engine validation failed"
+    :severity :high}
+   :signature-trust-validation-error
+   {:code :signature-trust-validation-error
+    :message "Error during signature trust validation"
+    :severity :high}
+   :no-trust-engine-configured
+   {:code :no-trust-engine-configured
+    :message "No trust engine configured for signature validation"
+    :severity :high}
+   :key-info-missing-certificate
+   {:code :key-info-missing-certificate
+    :message "KeyInfo does not contain required certificate"
+    :severity :medium}
+   :weak-encryption-algorithm
+   {:code :weak-encryption-algorithm
+    :message "Encryption algorithm does not meet security requirements"
+    :severity :high}
+   :weak-signature-algorithm
+   {:code :weak-signature-algorithm
+    :message "Signature algorithm does not meet security requirements"
+    :severity :high}
+   :one-time-use-requires-state-manager
+   {:code :one-time-use-requires-state-manager
+    :message "OneTimeUse condition requires a state manager to track usage"
+    :severity :high}
+   :invalid-plugin-configuration
+   {:code :invalid-plugin-configuration
+    :message "Custom validation plugin is misconfigured"
+    :severity :high}
+   :plugin-validation-failed
+   {:code :plugin-validation-failed
+    :message "Custom validation plugin failed"
+    :severity :medium}})
 
 (defn validation-error
   "Create a structured validation error with rich context"

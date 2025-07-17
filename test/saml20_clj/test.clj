@@ -1,10 +1,10 @@
  (ns saml20-clj.test
-  "Test utils."
-  (:require [clojure.string :as str]
-            ring.util.codec
-            [saml20-clj.coerce :as coerce]
-            [saml20-clj.encode-decode :as encode-decode])
-  (:import [org.apache.commons.codec.binary Base64]))
+   "Test utils."
+   (:require [clojure.string :as str]
+             ring.util.codec
+             [saml20-clj.coerce :as coerce]
+             [saml20-clj.encode-decode :as encode-decode])
+   (:import [org.apache.commons.codec.binary Base64]))
 
 (set! *warn-on-reflection* true)
 
@@ -199,9 +199,28 @@
   (format "Response with %s message, %s %s%s %s assertion\n%s"
           (if message-signed? "SIGNED" "unsigned")
           (if malicious-signature? "MALICIOUS" "not-malicious")
-          (cond valid-confirmation-data?   "VALID confirmation data, "
+          (cond valid-confirmation-data? "VALID confirmation data, "
                 invalid-confirmation-data? "INVALID confiration data, "
-                :else                      "")
+                :else "")
           (if assertion-signed? "SIGNED" "unsigned")
           (if assertion-encrypted? "ENCRYPTED" "unencrypted")
           (pr-str (list 'saml20-clj.test/response (dissoc m :response)))))
+
+(defn signed?
+  "Test if a response has a signature (message or assertion)"
+  [response-map]
+  (or (:message-signed? response-map)
+      (:assertion-signed? response-map)))
+
+(defn has-valid-signature?
+  "Test if a response has a valid (non-malicious) signature"
+  [response-map]
+  (and (signed? response-map)
+       (not (:malicious-signature? response-map))))
+
+(defn idp-private-key
+  "Get the IDP private key from keystore"
+  []
+  {:filename keystore-filename
+   :password keystore-password
+   :alias "idp"})
