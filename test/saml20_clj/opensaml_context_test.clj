@@ -85,12 +85,12 @@ LbB7p5FPG8XXCMl7kDfQj0OpQwX3LCa0HABVr3TMQHF9R6cNkYpJ
       (is (some? (.getSignatureValidationParameters sec-ctx))))))
 
 (deftest enhance-message-context-test
-  (testing "Enhancing message context with security parameters"
+  (testing "Adding security parameters to message context"
     (let [msg-ctx (MessageContext.)
           options {:idp-cert test-cert}
-          enhanced-ctx (ctx/enhance-message-context msg-ctx options)]
-      (is (identical? msg-ctx enhanced-ctx))
-      (is (some? (.getSubcontext enhanced-ctx SecurityParametersContext))))))
+          msg-ctx-with-params (ctx/enhance-message-context msg-ctx options)]
+      (is (identical? msg-ctx msg-ctx-with-params))
+      (is (some? (.getSubcontext msg-ctx-with-params SecurityParametersContext))))))
 
 (deftest get-peer-entity-context-test
   (testing "Getting existing peer entity context"
@@ -171,7 +171,7 @@ LbB7p5FPG8XXCMl7kDfQj0OpQwX3LCa0HABVr3TMQHF9R6cNkYpJ
             resolver (ctx/create-credential-resolver certs)]
         (is (= 2 (count (.resolve resolver nil))))))
 
-    (testing "Enhancing already enhanced context is idempotent"
+    (testing "Adding parameters to already configured context is idempotent"
       (let [msg-ctx (MessageContext.)
             options {:idp-cert test-cert}]
         (ctx/enhance-message-context msg-ctx options)
@@ -180,6 +180,6 @@ LbB7p5FPG8XXCMl7kDfQj0OpQwX3LCa0HABVr3TMQHF9R6cNkYpJ
           (let [second-ctx (.getSubcontext msg-ctx SecurityParametersContext)]
             (is (identical? first-ctx second-ctx))))))
 
-    (testing "Getting trust engine from unenhanced context"
+    (testing "Getting trust engine from unconfigured context"
       (let [msg-ctx (MessageContext.)]
         (is (nil? (ctx/get-signature-trust-engine msg-ctx)))))))

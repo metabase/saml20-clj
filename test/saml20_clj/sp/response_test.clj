@@ -585,8 +585,8 @@
       ;; Clean up
       (response/unregister-validation-plugin :test-plugin))))
 
-(deftest test-enhanced-state-manager
-  "Test enhanced state manager functionality for Phase 3"
+(deftest test-state-manager
+  "Test state manager functionality for Phase 3"
   (testing "cleanup-expired! and is-duplicate? methods"
     (let [state-manager (state/in-memory-state-manager)]
 
@@ -608,8 +608,8 @@
       ;; State should still contain our assertion after cleanup
       (is (= true (state/is-duplicate? state-manager "test-assertion-1"))))))
 
-(deftest test-enhanced-replay-prevention
-  "Test enhanced replay prevention validator"
+(deftest test-replay-prevention
+  "Test replay prevention validator"
   (testing "replay prevention with is-duplicate? check"
     (let [state-manager (state/in-memory-state-manager)
           assertion (coerce/->SAMLObject (create-test-assertion))
@@ -650,8 +650,8 @@
     (let [config (response/create-validation-config :sp-initiated {:custom-setting true})]
       (is (= true (:custom-setting config))))))
 
-(deftest test-enhanced-plugin-system
-  "Test enhanced plugin system with validation"
+(deftest test-plugin-system
+  "Test plugin system with validation"
   (testing "plugin validation on registration"
     (let [valid-plugin (reify response/CustomValidator
                          (validate-custom [this element options context] nil))
@@ -809,7 +809,7 @@
         (is false "Should have thrown exception")
         (catch clojure.lang.ExceptionInfo e
           (let [data (ex-data e)]
-            (is (= :audience-restriction (get-in data [:error-type])))
+            (is (= :audience-restriction (get data :error-type)))
             (is (= wrong-entity-id (:expected-audience data)))
             (is (vector? (:actual-audiences data)))
             (is (= [["sp.example.com"]] (:actual-audiences data)))))))))

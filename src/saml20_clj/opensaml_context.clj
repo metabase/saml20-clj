@@ -1,5 +1,5 @@
 (ns saml20-clj.opensaml-context
-  "OpenSAML security context integration for enhanced validation"
+  "OpenSAML security context integration for validation"
   (:require
    [saml20-clj.coerce :as coerce])
   (:import
@@ -45,7 +45,7 @@
     context))
 
 (defn enhance-message-context
-  "Enhance a MessageContext with security parameters"
+  "Add security parameters to a MessageContext"
   [^MessageContext msg-ctx options]
   (when-not (.getSubcontext msg-ctx SecurityParametersContext)
     (let [security-ctx (create-security-parameters-context options)]
