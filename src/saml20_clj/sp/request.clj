@@ -106,7 +106,7 @@
     (->ring-request)))
 
 (defn- build-logout-obj
-  ^LogoutRequest [issuer user-email idp-url instant request-id session-index]
+  ^LogoutRequest [issuer user-email idp-url instant request-id session-index name-id-format]
   (assert (non-blank-string? idp-url) "idp-url is required")
   (assert (non-blank-string? issuer) "issuer is required")
   (assert (non-blank-string? user-email) "user-email is required")
@@ -117,7 +117,12 @@
                          (.setIssuer (doto (.buildObject (IssuerBuilder.))
                                        (.setValue issuer)))
                          (.setNameID (doto (.buildObject (NameIDBuilder.))
-                                       (.setValue user-email))))]
+                                       (.setValue user-email)
+                                       ;; An IdP matches a LogoutRequest on NameID (+ SessionIndex),
+                                       ;; and some compare the Format literally, so echo back the
+                                       ;; Format the IdP used in its login assertion when we have it.
+                                       (cond-> (non-blank-string? name-id-format)
+                                         (.setFormat name-id-format)))))]
     ;; Identify *which* session to end. Some IdPs (e.g. Auth0) issue several sessions for one
     ;; NameID and reject a LogoutRequest that does not name one. Only ever send an index the IdP
     ;; itself gave us at login: a fabricated or fixed value broke Azure AD previously (#41600).
@@ -175,9 +180,12 @@
 (defn idp-logout-redirect-response
   "Return Ring response for HTTP 302 redirect.
 
-  The map arity accepts an optional `:session-index` - the `SessionIndex` the IdP sent in its
-  login assertion. Pass it to scope the LogoutRequest to a single session; omit it and the
-  request is unchanged from one built without it."
+  The map arity accepts two optional keys, both echoing back what the IdP sent in its login
+  assertion. Omit either and the request is unchanged from one built without it.
+
+  - `:session-index`  - the `SessionIndex`, which scopes the request to a single session.
+  - `:name-id-format` - the `Format` of the `NameID`. IdPs match a LogoutRequest on the NameID,
+    and some compare its Format literally."
   ([issuer user-email idp-url relay-state]
    (idp-logout-redirect-response issuer user-email idp-url relay-state (random-request-id)))
   ([issuer user-email idp-url relay-state request-id]
@@ -186,11 +194,13 @@
                                   :idp-url idp-url
                                   :relay-state relay-state
                                   :request-id request-id}))
-  ([{:keys [request-id instant idp-url issuer user-email credential relay-state sig-alg session-index]
+  ([{:keys [request-id instant idp-url issuer user-email credential relay-state sig-alg session-index
+            name-id-format]
      :or {instant (t/instant)
           request-id (random-request-id)
           sig-alg -sig-alg}}]
-   (let [logout-request (build-logout-obj issuer user-email idp-url instant request-id session-index)]
+   (let [logout-request (build-logout-obj issuer user-email idp-url instant request-id session-index
+                                          name-id-format)]
      (redirect-response (setup-message-context logout-request credential sig-alg idp-url) relay-state))))
 
 (defn logout-redirect-location

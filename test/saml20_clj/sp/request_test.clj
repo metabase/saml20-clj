@@ -177,7 +177,7 @@
         (let [logout-request (#'request/build-logout-obj
                               (:issuer base) (:user-email base) (:idp-url base)
                               (t/instant "2020-09-24T22:51:00.000Z") (:request-id base)
-                              "_session-index-abc")]
+                              "_session-index-abc" nil)]
           (is (= ["_session-index-abc"]
                  (mapv #(.getValue ^org.opensaml.saml.saml2.core.SessionIndex %)
                        (.getSessionIndexes logout-request))))))
@@ -187,7 +187,7 @@
             (let [logout-request (#'request/build-logout-obj
                                   (:issuer base) (:user-email base) (:idp-url base)
                                   (t/instant "2020-09-24T22:51:00.000Z") (:request-id base)
-                                  absent)]
+                                  absent nil)]
               (is (empty? (.getSessionIndexes logout-request)))))))
       (testing "the redirect is byte-identical to one built without a SessionIndex"
         ;; A fixed or fabricated SessionIndex previously broke Azure AD (#41600), so IdPs that
@@ -198,3 +198,33 @@
       (testing "supplying a SessionIndex changes the request"
         (is (not= (location base)
                   (location (assoc base :session-index "_session-index-abc"))))))))
+
+(deftest idp-logout-redirect-response-name-id-format-test
+  (t/with-clock (t/mock-clock (t/instant "2020-09-24T22:51:00.000Z"))
+    (let [base {:issuer      "http://sp.example.com/demo1/metadata.php"
+                :user-email  "auth0|6aa84804307cb57e6a94465a"
+                :idp-url     "http://idp.example.com/SSOService.php"
+                :relay-state "relay"
+                :request-id  "ONELOGIN_109707f0030a5d00620c9d9df97f627afe9dcc24"}
+          location #(request/logout-redirect-location %)
+          fmt "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified"]
+      (testing "the NameID carries the Format when we have one"
+        (let [logout-request (#'request/build-logout-obj
+                              (:issuer base) (:user-email base) (:idp-url base)
+                              (t/instant "2020-09-24T22:51:00.000Z") (:request-id base)
+                              nil fmt)]
+          (is (= fmt (.getFormat (.getNameID logout-request))))))
+      (testing "no Format is set when we do not have one"
+        (doseq [absent [nil "" "   "]]
+          (testing (pr-str absent)
+            (let [logout-request (#'request/build-logout-obj
+                                  (:issuer base) (:user-email base) (:idp-url base)
+                                  (t/instant "2020-09-24T22:51:00.000Z") (:request-id base)
+                                  nil absent)]
+              (is (nil? (.getFormat (.getNameID logout-request))))))))
+      (testing "the redirect is byte-identical to one built without a Format"
+        (is (= (location base)
+               (location (assoc base :name-id-format nil))
+               (location (assoc base :name-id-format "   ")))))
+      (testing "supplying a Format changes the request"
+        (is (not= (location base) (location (assoc base :name-id-format fmt))))))))
