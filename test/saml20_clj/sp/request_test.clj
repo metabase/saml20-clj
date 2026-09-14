@@ -164,3 +164,37 @@
                  :idp-url idp-url
                  :relay-state (test/str->base64 issuer)
                  :request-id req-id})))))))
+
+(deftest idp-logout-redirect-response-session-index-test
+  (t/with-clock (t/mock-clock (t/instant "2020-09-24T22:51:00.000Z"))
+    (let [base {:issuer      "http://sp.example.com/demo1/metadata.php"
+                :user-email  "user@example.com"
+                :idp-url     "http://idp.example.com/SSOService.php"
+                :relay-state "relay"
+                :request-id  "ONELOGIN_109707f0030a5d00620c9d9df97f627afe9dcc24"}
+          location #(request/logout-redirect-location %)]
+      (testing "a SessionIndex is included in the LogoutRequest"
+        (let [logout-request (#'request/build-logout-obj
+                              (:issuer base) (:user-email base) (:idp-url base)
+                              (t/instant "2020-09-24T22:51:00.000Z") (:request-id base)
+                              "_session-index-abc")]
+          (is (= ["_session-index-abc"]
+                 (mapv #(.getValue ^org.opensaml.saml.saml2.core.SessionIndex %)
+                       (.getSessionIndexes logout-request))))))
+      (testing "no SessionIndex element is added when we do not have one"
+        (doseq [absent [nil "" "   "]]
+          (testing (pr-str absent)
+            (let [logout-request (#'request/build-logout-obj
+                                  (:issuer base) (:user-email base) (:idp-url base)
+                                  (t/instant "2020-09-24T22:51:00.000Z") (:request-id base)
+                                  absent)]
+              (is (empty? (.getSessionIndexes logout-request)))))))
+      (testing "the redirect is byte-identical to one built without a SessionIndex"
+        ;; A fixed or fabricated SessionIndex previously broke Azure AD (#41600), so IdPs that
+        ;; never send one must keep seeing exactly the request they saw before.
+        (is (= (location base)
+               (location (assoc base :session-index nil))
+               (location (assoc base :session-index "   ")))))
+      (testing "supplying a SessionIndex changes the request"
+        (is (not= (location base)
+                  (location (assoc base :session-index "_session-index-abc"))))))))

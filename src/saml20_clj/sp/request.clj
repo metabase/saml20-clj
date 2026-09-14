@@ -6,7 +6,7 @@
              [saml20-clj.state :as state])
    (:import [org.opensaml.saml.common.messaging.context SAMLBindingContext SAMLEndpointContext SAMLPeerEntityContext]
             [org.opensaml.saml.saml2.core AuthnRequest LogoutRequest NameIDType]
-            [org.opensaml.saml.saml2.core.impl AuthnRequestBuilder IssuerBuilder LogoutRequestBuilder NameIDBuilder NameIDPolicyBuilder]
+            [org.opensaml.saml.saml2.core.impl AuthnRequestBuilder IssuerBuilder LogoutRequestBuilder NameIDBuilder NameIDPolicyBuilder SessionIndexBuilder]
             org.opensaml.messaging.context.MessageContext
             org.opensaml.saml.common.xml.SAMLConstants
             org.opensaml.saml.saml2.binding.encoding.impl.HTTPRedirectDeflateEncoder
@@ -106,18 +106,27 @@
     (->ring-request)))
 
 (defn- build-logout-obj
-  ^LogoutRequest [issuer user-email idp-url instant request-id]
+  ^LogoutRequest [issuer user-email idp-url instant request-id session-index]
   (assert (non-blank-string? idp-url) "idp-url is required")
   (assert (non-blank-string? issuer) "issuer is required")
   (assert (non-blank-string? user-email) "user-email is required")
-  (doto (.buildObject (LogoutRequestBuilder.))
-    (.setID request-id)
-    (.setIssueInstant instant)
-    (.setDestination idp-url)
-    (.setIssuer (doto (.buildObject (IssuerBuilder.))
-                  (.setValue issuer)))
-    (.setNameID (doto (.buildObject (NameIDBuilder.))
-                  (.setValue user-email)))))
+  (let [logout-request (doto (.buildObject (LogoutRequestBuilder.))
+                         (.setID request-id)
+                         (.setIssueInstant instant)
+                         (.setDestination idp-url)
+                         (.setIssuer (doto (.buildObject (IssuerBuilder.))
+                                       (.setValue issuer)))
+                         (.setNameID (doto (.buildObject (NameIDBuilder.))
+                                       (.setValue user-email))))]
+    ;; Identify *which* session to end. Some IdPs (e.g. Auth0) issue several sessions for one
+    ;; NameID and reject a LogoutRequest that does not name one. Only ever send an index the IdP
+    ;; itself gave us at login: a fabricated or fixed value broke Azure AD previously (#41600).
+    ;; When we have none, omit the element entirely so the request is byte-identical to before.
+    (when (non-blank-string? session-index)
+      (.add (.getSessionIndexes logout-request)
+            (doto (.buildObject (SessionIndexBuilder.))
+              (.setValue session-index))))
+    logout-request))
 
 (defn idp-redirect-response
   "Return Ring response for HTTP 302 redirect."
@@ -164,7 +173,11 @@
                      relay-state))
 
 (defn idp-logout-redirect-response
-  "Return Ring response for HTTP 302 redirect."
+  "Return Ring response for HTTP 302 redirect.
+
+  The map arity accepts an optional `:session-index` - the `SessionIndex` the IdP sent in its
+  login assertion. Pass it to scope the LogoutRequest to a single session; omit it and the
+  request is unchanged from one built without it."
   ([issuer user-email idp-url relay-state]
    (idp-logout-redirect-response issuer user-email idp-url relay-state (random-request-id)))
   ([issuer user-email idp-url relay-state request-id]
@@ -173,11 +186,11 @@
                                   :idp-url idp-url
                                   :relay-state relay-state
                                   :request-id request-id}))
-  ([{:keys [request-id instant idp-url issuer user-email credential relay-state sig-alg]
+  ([{:keys [request-id instant idp-url issuer user-email credential relay-state sig-alg session-index]
      :or {instant (t/instant)
           request-id (random-request-id)
           sig-alg -sig-alg}}]
-   (let [logout-request (build-logout-obj issuer user-email idp-url instant request-id)]
+   (let [logout-request (build-logout-obj issuer user-email idp-url instant request-id session-index)]
      (redirect-response (setup-message-context logout-request credential sig-alg idp-url) relay-state))))
 
 (defn logout-redirect-location
