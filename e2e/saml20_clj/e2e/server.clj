@@ -43,7 +43,7 @@
     :okta {:sp-name "SAMLTest"
            :acs-url "https://test-server:3001/login"
            :issuer "SAMLTest"
-           :idp-url "https://dev-08548225.okta.com/app/dev-08548225_mbcitest_1/exknlfxer1RcyaTAS5d7/sso/saml"
+           :idp-url "https://integrator-6228049.okta.com/app/integrator-6228049_mbcitest_1/exk17m5o3tuIobJEA698/sso/saml"
            :request-id "a-test-request"
            :credential test/sp-private-key}
     :keycloak {:sp-name "SAMLTest"
@@ -67,7 +67,7 @@
     :okta {:sp-name "SAMLTest"
            :acs-url "https://test-server:3001/logout"
            :issuer "SAMLTest"
-           :idp-url "https://dev-08548225.okta.com/app/dev-08548225_mbcitest_1/exknlfxer1RcyaTAS5d7/slo/saml"
+           :idp-url "https://integrator-6228049.okta.com/app/integrator-6228049_mbcitest_1/exk17m5o3tuIobJEA698/slo/saml"
            :relay-state "okta"
            :user-email "metatest@example.com"
            :request-id "a-test-request"
@@ -90,7 +90,7 @@
             :request-id "a-test-request"}
     :okta {:idp-cert (slurp "e2e/saml20_clj/e2e/okta.cert")
            :acs-url "https://test-server:3001/login"
-           :issuer "http://www.okta.com/exknlfxer1RcyaTAS5d7"
+           :issuer "http://www.okta.com/exk17m5o3tuIobJEA698"
            :request-id "a-test-request"}
     :keycloak {:idp-cert test/idp-cert
                :acs-url "https://test-server:3001/login"
