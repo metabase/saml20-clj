@@ -7,8 +7,8 @@
             [saml20-clj.sp.message :as message]
             [saml20-clj.state :as state]
             [saml20-clj.xml :as xml])
-  (:import [org.opensaml.saml.saml2.core Assertion Attribute AttributeStatement Audience AudienceRestriction Response
-            Subject SubjectConfirmation SubjectConfirmationData]
+  (:import [org.opensaml.saml.saml2.core Assertion Attribute AttributeStatement Audience AudienceRestriction
+            AuthnStatement Response Subject SubjectConfirmation SubjectConfirmationData]
            org.opensaml.messaging.context.MessageContext
            org.opensaml.saml.saml2.core.impl.AuthnRequestBuilder))
 
@@ -318,16 +318,21 @@
                             (apply (partial merge-with concat)))
           audiences    (for [^AudienceRestriction restriction (.. assertion getConditions getAudienceRestrictions)
                              ^Audience audience               (.getAudiences restriction)]
-                         (.getURI audience))]
-      {:attrs        attrs
-       :audiences    audiences
-       :name-id      {:value  (some-> name-id .getValue)
-                      :format (some-> name-id .getFormat)}
-       :confirmation {:in-response-to  (.getInResponseTo subject-data)
-                      :not-before      (some-> (.getNotBefore subject-data) (t/instant))
-                      :not-on-or-after (t/instant (.getNotOnOrAfter subject-data))
-                      :address         (.getAddress subject-data)
-                      :recipient       (.getRecipient subject-data)}})))
+                         (.getURI audience))
+          ;; The IdP's identifier for the session this assertion established. Needed to scope a
+          ;; LogoutRequest to one session (SAML Profiles 4.4.4.1). Optional, and an assertion may
+          ;; carry several AuthnStatements, so take the first if there is one.
+          session-index (some-> ^AuthnStatement (first (.getAuthnStatements assertion)) .getSessionIndex)]
+      {:attrs         attrs
+       :audiences     audiences
+       :session-index session-index
+       :name-id       {:value  (some-> name-id .getValue)
+                       :format (some-> name-id .getFormat)}
+       :confirmation  {:in-response-to  (.getInResponseTo subject-data)
+                       :not-before      (some-> (.getNotBefore subject-data) (t/instant))
+                       :not-on-or-after (t/instant (.getNotOnOrAfter subject-data))
+                       :address         (.getAddress subject-data)
+                       :recipient       (.getRecipient subject-data)}})))
 
 (defn assertions
   "Returns the assertions (encrypted or not) of a SAML Response object"

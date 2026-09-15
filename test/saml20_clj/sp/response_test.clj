@@ -22,17 +22,18 @@
   (doseq [{:keys [response], :as response-map} (test/responses)
           :when (not test/invalid-confirmation-data?)]
     (testing (test/describe-response-map response-map)
-      (is (= [{:attrs        {"uid"                  ["test"]
-                              "mail"                 ["test@example.com"]
-                              "eduPersonAffiliation" ["users" "examplerole1"]}
-               :audiences    ["sp.example.com"]
-               :name-id      {:value  "_ce3d2948b4cf20146dee0a0b3dd6f69b6cf86f62d7"
-                              :format "urn:oasis:names:tc:SAML:2.0:nameid-format:transient"}
-               :confirmation {:in-response-to  "ONELOGIN_4fee3b046395c4e751011e97f8900b5273d56685"
-                              :not-before      nil
-                              :not-on-or-after (t/instant "2024-01-18T06:21:48.000Z")
-                              :address         nil
-                              :recipient       "http://sp.example.com/demo1/index.php?acs"}}]
+      (is (= [{:attrs         {"uid"                  ["test"]
+                               "mail"                 ["test@example.com"]
+                               "eduPersonAffiliation" ["users" "examplerole1"]}
+               :audiences     ["sp.example.com"]
+               :session-index "_be9967abd904ddcae3c0eb4189adbe3f71e327cf93"
+               :name-id       {:value  "_ce3d2948b4cf20146dee0a0b3dd6f69b6cf86f62d7"
+                               :format "urn:oasis:names:tc:SAML:2.0:nameid-format:transient"}
+               :confirmation  {:in-response-to  "ONELOGIN_4fee3b046395c4e751011e97f8900b5273d56685"
+                               :not-before      nil
+                               :not-on-or-after (t/instant "2024-01-18T06:21:48.000Z")
+                               :address         nil
+                               :recipient       "http://sp.example.com/demo1/index.php?acs"}}]
              (response/assertions response test/sp-private-key))))))
 
 ;; • Verify any signatures present on the assertion(s) or the response
@@ -304,17 +305,18 @@
   (testing "basic checks on Assertions->map conversions"
     (doseq [{:keys [response], :as response-map} (test/responses)
             :when                                (test/valid-confirmation-data? response-map)]
-      (is (= {:audiences    '("sp.example.com")
-              :attrs        {"uid"                  '("test")
-                             "mail"                 '("test@example.com")
-                             "eduPersonAffiliation" '("users" "examplerole1")}
-              :name-id      {:value  "_ce3d2948b4cf20146dee0a0b3dd6f69b6cf86f62d7",
-                             :format "urn:oasis:names:tc:SAML:2.0:nameid-format:transient"},
-              :confirmation {:in-response-to  "ONELOGIN_4fee3b046395c4e751011e97f8900b5273d56685",
-                             :not-before      (t/instant "2019-01-18T06:21:48Z"),
-                             :not-on-or-after (t/instant "2024-01-18T06:21:48Z"),
-                             :address         "192.168.1.1",
-                             :recipient       "http://sp.example.com/demo1/index.php?acs"}}
+      (is (= {:audiences     '("sp.example.com")
+              :attrs         {"uid"                  '("test")
+                              "mail"                 '("test@example.com")
+                              "eduPersonAffiliation" '("users" "examplerole1")}
+              :session-index "_be9967abd904ddcae3c0eb4189adbe3f71e327cf93"
+              :name-id       {:value  "_ce3d2948b4cf20146dee0a0b3dd6f69b6cf86f62d7",
+                              :format "urn:oasis:names:tc:SAML:2.0:nameid-format:transient"},
+              :confirmation  {:in-response-to  "ONELOGIN_4fee3b046395c4e751011e97f8900b5273d56685",
+                              :not-before      (t/instant "2019-01-18T06:21:48Z"),
+                              :not-on-or-after (t/instant "2024-01-18T06:21:48Z"),
+                              :address         "192.168.1.1",
+                              :recipient       "http://sp.example.com/demo1/index.php?acs"}}
              (first (response/assertions (coerce/->Response response)))))))
   (testing "Attribute Nodes sharing a Name will collect all of their contained Attribute Value Nodes."
     (let [response (test/response {})]
