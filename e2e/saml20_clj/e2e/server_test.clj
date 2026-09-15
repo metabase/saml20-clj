@@ -6,9 +6,12 @@
   {:entra {:username "metatest@luizarakakimetabase.onmicrosoft.com"
            :password "ThisMustBeThePassword2!" }})
 
+;; Okta is excluded: the free developer org backing these tests
+;; (dev-08548225.okta.com) has been deactivated, so its sign-in page answers every
+;; credential submit with "This developer org has been deactivated." Re-add :okta here
+;; once a live org is provisioned and its credentials are wired up.
 (t/deftest test-saml-login-logout
-  (doseq [provider [:okta
-                    :keycloak]]
+  (doseq [provider [:keycloak]]
     (etaoin/with-chrome
         {:port 4444
          :host "localhost"
